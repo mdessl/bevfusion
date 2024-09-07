@@ -136,3 +136,5 @@ runs/*
 # torch hipify generated files
 *_hip.*
 *.hip
+data_trainval/
+docker/bevfusion_image.tar
