@@ -139,13 +139,9 @@ class NuScenesDataset(Custom3DDataset):
         test_mode=False,
         eval_version="detection_cvpr_2019",
         use_valid_flag=False,
-        empty_lidar=False,
-        empty_img=False,
     ) -> None:
         self.load_interval = load_interval
         self.use_valid_flag = use_valid_flag
-        self.empty_lidar = empty_lidar
-        self.empty_img = empty_img
         super().__init__(
             dataset_root=dataset_root,
             ann_file=ann_file,
@@ -286,13 +282,13 @@ class NuScenesDataset(Custom3DDataset):
                 camera2lidar[:3, 3] = camera_info["sensor2lidar_translation"]
                 data["camera2lidar"].append(camera2lidar)
 
-        if self.empty_lidar:
+        if getattr(self, 'empty_lidar', False):
             # Replace LiDAR data with zero tensor
             # You'll need to determine the correct shape for your LiDAR data
             lidar_shape = (1, 4, 1024, 1024)  # Example shape, adjust as needed
             data["lidar_points"] = np.zeros(lidar_shape, dtype=np.float32)
         
-        if self.empty_img and self.modality["use_camera"]:
+        if getattr(self, 'empty_img', False) and self.modality["use_camera"]:
             # Replace image data with zero tensor
             # You'll need to determine the correct shape for your image data
             img_shape = (6, 3, 900, 1600)  # Example shape, adjust as needed
