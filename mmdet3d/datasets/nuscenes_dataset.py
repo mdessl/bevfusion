@@ -52,6 +52,8 @@ class NuScenesDataset(Custom3DDataset):
             Defaults to  'detection_cvpr_2019'.
         use_valid_flag (bool): Whether to use `use_valid_flag` key in the info
             file as mask to filter gt_boxes and gt_names. Defaults to False.
+        empty_lidar (bool): When set to True, replaces the LiDAR data with a zero tensor.
+        empty_img (bool): When set to True, replaces the image data with a zero tensor.
     """
     NameMapping = {
         "movable_object.barrier": "barrier",
@@ -137,9 +139,13 @@ class NuScenesDataset(Custom3DDataset):
         test_mode=False,
         eval_version="detection_cvpr_2019",
         use_valid_flag=False,
+        empty_lidar=False,
+        empty_img=False,
     ) -> None:
         self.load_interval = load_interval
         self.use_valid_flag = use_valid_flag
+        self.empty_lidar = empty_lidar
+        self.empty_img = empty_img
         super().__init__(
             dataset_root=dataset_root,
             ann_file=ann_file,
@@ -279,6 +285,18 @@ class NuScenesDataset(Custom3DDataset):
                 camera2lidar[:3, :3] = camera_info["sensor2lidar_rotation"]
                 camera2lidar[:3, 3] = camera_info["sensor2lidar_translation"]
                 data["camera2lidar"].append(camera2lidar)
+
+        if self.empty_lidar:
+            # Replace LiDAR data with zero tensor
+            # You'll need to determine the correct shape for your LiDAR data
+            lidar_shape = (1, 4, 1024, 1024)  # Example shape, adjust as needed
+            data["lidar_points"] = np.zeros(lidar_shape, dtype=np.float32)
+        
+        if self.empty_img and self.modality["use_camera"]:
+            # Replace image data with zero tensor
+            # You'll need to determine the correct shape for your image data
+            img_shape = (6, 3, 900, 1600)  # Example shape, adjust as needed
+            data["images"] = np.zeros(img_shape, dtype=np.uint8)
 
         annos = self.get_ann_info(index)
         data["ann_info"] = annos

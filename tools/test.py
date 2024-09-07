@@ -95,6 +95,17 @@ def parse_args():
         help="job launcher",
     )
     parser.add_argument("--local_rank", type=int, default=0)
+    parser.add_argument(
+        "--empty-lidar",
+        action="store_true",
+        help="Replace LiDAR data with zero tensors for testing",
+    )
+    parser.add_argument(
+        "--empty-img",
+        action="store_true",
+        help="Replace image data with zero tensors for testing",
+    )
+
     args = parser.parse_args()
     if "LOCAL_RANK" not in os.environ:
         os.environ["LOCAL_RANK"] = str(args.local_rank)
@@ -148,9 +159,13 @@ def main():
         if samples_per_gpu > 1:
             # Replace 'ImageToTensor' to 'DefaultFormatBundle'
             cfg.data.test.pipeline = replace_ImageToTensor(cfg.data.test.pipeline)
+        cfg.data.test.empty_lidar = args.empty_lidar
+        cfg.data.test.empty_img = args.empty_img
     elif isinstance(cfg.data.test, list):
         for ds_cfg in cfg.data.test:
             ds_cfg.test_mode = True
+            ds_cfg.empty_lidar = args.empty_lidar
+            ds_cfg.empty_img = args.empty_img
         samples_per_gpu = max(
             [ds_cfg.pop("samples_per_gpu", 1) for ds_cfg in cfg.data.test]
         )
