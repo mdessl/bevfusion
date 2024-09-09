@@ -15,10 +15,14 @@ class CBGSDataset:
         dataset (:obj:`CustomDataset`): The dataset to be class sampled.
     """
 
-    def __init__(self, dataset):
+    def __init__(self, dataset, **kwargs):
         self.dataset = dataset
         self.CLASSES = dataset.CLASSES
         self.cat2id = {name: i for i, name in enumerate(self.CLASSES)}
+        
+        # Store all new arguments
+        self.new_args = kwargs
+
         self.sample_indices = self._get_sample_indices()
         # self.dataset.data_infos = self.data_infos
         if hasattr(self.dataset, "flag"):

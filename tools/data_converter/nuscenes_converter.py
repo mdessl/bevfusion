@@ -91,6 +91,7 @@ def create_nuscenes_infos(root_path,
         print(info_prefix)
         print('train sample: {}, val sample: {}'.format(
             len(train_nusc_infos), len(val_nusc_infos)))
+        data = dict(infos=train_nusc_infos, metadata=metadata)
         info_path = osp.join(root_path,
                             '{}_infos_train.pkl'.format(info_prefix))
         mmcv.dump(data, info_path)
@@ -190,7 +191,9 @@ def _fill_trainval_infos(nusc,
             'timestamp': sample['timestamp'],
             'prev_token': sample['prev']
         }
-
+        info["location"] = nusc.get(
+        "log", nusc.get("scene", sample["scene_token"])["log_token"]
+        )["location"]
         l2e_r = info['lidar2ego_rotation']
         l2e_t = info['lidar2ego_translation']
         e2g_r = info['ego2global_rotation']

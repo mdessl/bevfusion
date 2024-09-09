@@ -17,7 +17,7 @@ if platform.system() != "Windows":
 OBJECTSAMPLERS = Registry("Object sampler")
 
 
-def build_dataset(cfg, default_args=None):
+def build_dataset(cfg, default_args=None, new_args=None):
     from mmdet3d.datasets.dataset_wrappers import CBGSDataset
     from mmdet.datasets.dataset_wrappers import ClassBalancedDataset, ConcatDataset, RepeatDataset
 
@@ -35,7 +35,8 @@ def build_dataset(cfg, default_args=None):
             build_dataset(cfg["dataset"], default_args), cfg["oversample_thr"]
         )
     elif cfg["type"] == "CBGSDataset":
-        dataset = CBGSDataset(build_dataset(cfg["dataset"], default_args))
+        inner_dataset = build_dataset(cfg["dataset"], default_args)
+        dataset = CBGSDataset(inner_dataset, **new_args) if new_args else CBGSDataset(inner_dataset)
     elif isinstance(cfg.get("ann_file"), (list, tuple)):
         dataset = _concat_dataset(cfg, default_args)
     else:

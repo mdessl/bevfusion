@@ -137,4 +137,5 @@ runs/*
 *_hip.*
 *.hip
 data_trainval/
-docker/bevfusion_image.tar
+docker/bevfusion.tar
+pretrained

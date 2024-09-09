@@ -281,7 +281,7 @@ class NuScenesDataset(Custom3DDataset):
                 camera2lidar[:3, :3] = camera_info["sensor2lidar_rotation"]
                 camera2lidar[:3, 3] = camera_info["sensor2lidar_translation"]
                 data["camera2lidar"].append(camera2lidar)
-
+        """
         if getattr(self, 'empty_lidar', False):
             # Replace LiDAR data with zero tensor
             # You'll need to determine the correct shape for your LiDAR data
@@ -293,7 +293,7 @@ class NuScenesDataset(Custom3DDataset):
             # You'll need to determine the correct shape for your image data
             img_shape = (6, 3, 900, 1600)  # Example shape, adjust as needed
             data["images"] = np.zeros(img_shape, dtype=np.uint8)
-
+        """
         annos = self.get_ann_info(index)
         data["ann_info"] = annos
         return data
