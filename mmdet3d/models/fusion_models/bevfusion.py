@@ -21,6 +21,7 @@ from .base import Base3DFusionModel
 __all__ = ["BEVFusion"]
 
 
+
 @FUSIONMODELS.register_module()
 class BEVFusion(Base3DFusionModel):
     def __init__(
@@ -32,6 +33,13 @@ class BEVFusion(Base3DFusionModel):
         **kwargs,
     ) -> None:
         super().__init__()
+        print("bevfusion")
+        import os, json
+        if os.path.exists('custom_args.json'):
+            with open('custom_args.json', 'r') as f:
+                self.costum_args = json.load(f)
+        else:
+            self.costum_args = {}            
 
         self.encoders = nn.ModuleDict()
         if encoders.get("camera") is not None:
@@ -247,6 +255,20 @@ class BEVFusion(Base3DFusionModel):
         gt_labels_3d=None,
         **kwargs,
     ):
+        """
+
+        if self.costum_args:
+            n = self.costum_args["empty_tensor"]
+            if n == "img":
+                img = torch.zeros_like(img)
+            elif n == "points":
+                if isinstance(points, list) and len(points) == 1:
+                    points[0] = torch.zeros_like(points[0])
+                else:
+                    print(points)
+
+        """
+
         if isinstance(img, list):
             raise NotImplementedError
         else:
@@ -294,9 +316,16 @@ class BEVFusion(Base3DFusionModel):
     ):
         features = []
         auxiliary_losses = {}
+        if self.costum_args:
+            feature_type = self.costum_args["feature_type"]
+        
         for sensor in (
             self.encoders if self.training else list(self.encoders.keys())[::-1]
         ):
+            # Skip processing if it's not the specified feature type
+            if feature_type and sensor != feature_type:
+                continue
+            
             if sensor == "camera":
                 feature = self.extract_camera_features(
                     img,
@@ -322,13 +351,23 @@ class BEVFusion(Base3DFusionModel):
             else:
                 raise ValueError(f"unsupported sensor: {sensor}")
 
+            if self.costum_args:
+                n = self.costum_args["empty_tensor"]
+                if n == "img" and sensor == "camera":
+                    feature = torch.zeros_like(feature)
+                elif n == "points" and sensor == "lidar":
+                    feature = torch.zeros_like(feature)
+
             features.append(feature)
 
         if not self.training:
             # avoid OOM
             features = features[::-1]
 
-        if self.fuser is not None:
+        # Remove fusion step if only one feature type is used
+        if feature_type or len(features) == 1:
+            x = self.fuser(features)
+        elif self.fuser is not None:
             x = self.fuser(features)
         else:
             assert len(features) == 1, features
@@ -338,6 +377,7 @@ class BEVFusion(Base3DFusionModel):
 
         x = self.decoder["backbone"](x)
         x = self.decoder["neck"](x)
+
 
         if self.training:
             outputs = {}

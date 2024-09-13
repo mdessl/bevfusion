@@ -2,6 +2,7 @@ import argparse
 import copy
 import os
 import warnings
+import json
 
 import mmcv
 import torch
@@ -17,7 +18,6 @@ from mmdet3d.models import build_model
 from mmdet.apis import multi_gpu_test, set_random_seed
 from mmdet.datasets import replace_ImageToTensor
 from mmdet3d.utils import recursive_eval
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description="MMDet test (and eval) a model")
@@ -95,17 +95,21 @@ def parse_args():
         help="job launcher",
     )
     parser.add_argument("--local_rank", type=int, default=0)
-    new_arg_group.add_argument(
-        "--empty-lidar",
-        action="store_true",
+
+    parser.add_argument(
+        "--empty-tensor",
+        choices=["none", "points", "img"],
+        default="none",
         help="Replace LiDAR data with zero tensors for testing",
     )
-    new_arg_group.add_argument(
-        "--empty-img",
-        action="store_true",
-        help="Replace image data with zero tensors for testing",
-    )
 
+    parser.add_argument(
+        '--feature-type',
+        type=str,
+        choices=['camera', 'lidar'],
+        default=None,
+        help='Specify a single feature type to use (camera or lidar). If not specified, use all available features.'
+    )
 
     args = parser.parse_args()
     if "LOCAL_RANK" not in os.environ:
@@ -119,18 +123,26 @@ def parse_args():
     if args.options:
         warnings.warn("--options is deprecated in favor of --eval-options")
         args.eval_options = args.options
+
+    with open('custom_args.json', 'w') as f:
+        json.dump({'empty_tensor':getattr(args, 'empty_tensor'), 'feature_type':getattr(args, 'feature_type')}, f)
+
     return args
 
+def replace_key_with_zero_tensor(data, key_to_replace):
+    zero_tensor = DC(torch.zeros_like(data[key_to_replace].data))
+    new_data = {k: v for k, v in data.items() if k != key_to_replace}
+    new_data[key_to_replace] = zero_tensor
+    return new_data
+
+def ds_with_zero_tensors(dataset, attr):
+    for i, item in enumerate(dataset):
+        dataset[i] = replace_key_with_zero_tensor(item, attr)
+    return dataset
 
 def main():
     args = parse_args()
     dist.init()
-
-    new_args = {
-        action.dest: getattr(args, action.dest)
-        for action in args.parser._action_groups[-1]._group_actions
-        if getattr(args, action.dest) is not None
-    }
 
     torch.backends.cudnn.benchmark = True
     torch.cuda.set_device(dist.local_rank())
@@ -184,7 +196,7 @@ def main():
         set_random_seed(args.seed, deterministic=args.deterministic)
 
     # build the dataloader
-    dataset = build_dataset(cfg.data.test, new_args=new_args)
+    dataset = build_dataset(cfg.data.test)
     data_loader = build_dataloader(
         dataset,
         samples_per_gpu=samples_per_gpu,

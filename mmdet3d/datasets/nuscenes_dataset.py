@@ -2,12 +2,14 @@ import tempfile
 from os import path as osp
 from typing import Any, Dict
 
+
 import mmcv
 import numpy as np
 import pyquaternion
 import torch
 from nuscenes.utils.data_classes import Box as NuScenesBox
 from pyquaternion import Quaternion
+from mmcv.parallel import DataContainer as DC
 
 from mmdet.datasets import DATASETS
 
@@ -167,6 +169,8 @@ class NuScenesDataset(Custom3DDataset):
                 use_map=False,
                 use_external=False,
             )
+
+        self.costum_args = None
 
     def get_cat_ids(self, idx):
         """Get category distribution of single scene.
@@ -584,6 +588,69 @@ class NuScenesDataset(Custom3DDataset):
                 tmp_dir.cleanup()
 
         return metrics
+
+    def prepare_train_data(self, index):
+        """Training data preparation.
+
+        Args:
+            index (int): Index for accessing the target data.
+
+        Returns:
+            dict: Training data dict of the corresponding index.
+        """
+        input_dict = self.get_data_info(index)
+        if input_dict is None:
+            return None
+        self.pre_pipeline(input_dict)
+        example = self.pipeline(input_dict)
+        if self.filter_empty_gt and (
+            example is None or ~(example["gt_labels_3d"]._data != -1).any()
+        ):
+            return None
+
+        return example
+
+    def prepare_test_data(self, index):
+        """Prepare data for testing.
+
+        Args:
+            index (int): Index for accessing the target data.
+
+        Returns:
+            dict: Testing data dict of the corresponding index.
+        """
+        input_dict = self.get_data_info(index)
+        self.pre_pipeline(input_dict)
+        example = self.pipeline(input_dict)
+
+        """
+        if index == 0:
+            #print(example)
+            print("before")
+            print(example["img"].data.shape)
+            print(type(example["img"].data))
+            print(example["img"].data.dtype)
+            print(example.keys())
+            print(example)
+
+        if self.costum_args:
+            print(self.costum_args)
+            n = self.costum_args["empty_tensor"]
+            if n == "points" or n == "img":
+                example[n] = DC(torch.zeros_like(example[n].data))
+        if index == 0:
+            #print(example)
+            print("after")
+            print(example["img"].data.shape)
+            print(type(example["img"].data))
+            print(example["img"].data.dtype)
+            print(example.keys())
+            print(example)
+        """
+        
+        return example
+
+
 
 
 def output_to_nusc_box(detection):
