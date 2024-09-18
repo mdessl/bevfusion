@@ -17,7 +17,16 @@ RUN conda install pytorch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 cudatoo
 RUN pip install Pillow==8.4.0
 RUN pip install tqdm
 RUN pip install torchpack
-RUN pip install mmcv==1.4.0 mmcv-full==1.4.0 mmdet==2.20.0
-RUN pip install nuscenes-devkit
+# Install mmcv and mmcv-full with specified options
+RUN MMCV_WITH_OPS=1 FORCE_CUDA=1 pip install mmcv==2.0.0rc1 -f https://download.openmmlab.com/mmcv/dist/cu113/torch1.10.0/index.html
+RUN MMCV_WITH_OPS=1 FORCE_CUDA=1 pip install mmcv-full==1.4.0 -f https://download.openmmlab.com/mmcv/dist/cu113/torch1.10.0/index.html
+
+RUN pip install mmdet==2.20.0
+#RUN pip install nuscenes-desvkit
 RUN pip install mpi4py==3.0.3
 RUN pip install numba==0.48.0
+
+RUN pip install yapf==0.40.1
+RUN pip install setuptools==59.5.0
+RUN pip install flash-attn==0.2.0
+RUN pip install numpy==1.23.0

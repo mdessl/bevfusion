@@ -96,12 +96,6 @@ def parse_args():
     )
     parser.add_argument("--local_rank", type=int, default=0)
 
-    parser.add_argument(
-        "--empty-tensor",
-        choices=["none", "points", "img"],
-        default="none",
-        help="Replace LiDAR data with zero tensors for testing",
-    )
 
     parser.add_argument(
         '--feature-type',
@@ -111,6 +105,20 @@ def parse_args():
         help='Specify a single feature type to use (camera or lidar). If not specified, use all available features.'
     )
 
+    parser.add_argument(
+        "--empty-tensor",
+        choices=["none", "points", "img"],
+        default="none",
+        help="Replace LiDAR data with zero tensors for testing",
+    )
+
+    parser.add_argument(
+        '--zero-tensor-ratio',
+        type=float,
+        choices=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        default=1.,
+        help='Ratio of scenes to replace the specified feature type with zero tensors (0.0 to 1.0)'
+    )
     args = parser.parse_args()
     if "LOCAL_RANK" not in os.environ:
         os.environ["LOCAL_RANK"] = str(args.local_rank)
@@ -128,17 +136,6 @@ def parse_args():
         json.dump({'empty_tensor':getattr(args, 'empty_tensor'), 'feature_type':getattr(args, 'feature_type')}, f)
 
     return args
-
-def replace_key_with_zero_tensor(data, key_to_replace):
-    zero_tensor = DC(torch.zeros_like(data[key_to_replace].data))
-    new_data = {k: v for k, v in data.items() if k != key_to_replace}
-    new_data[key_to_replace] = zero_tensor
-    return new_data
-
-def ds_with_zero_tensors(dataset, attr):
-    for i, item in enumerate(dataset):
-        dataset[i] = replace_key_with_zero_tensor(item, attr)
-    return dataset
 
 def main():
     args = parse_args()

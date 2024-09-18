@@ -52,7 +52,7 @@ class DefaultFormatBundle3D:
             assert isinstance(results["points"], BasePoints)
             results["points"] = DC(results["points"].tensor)
 
-        if "radar" in results:
+        if False:#"radar" in results:
             results["radar"] = DC(results["radar"].tensor)
 
         for key in ["voxels", "coors", "voxel_centers", "num_points"]:
@@ -160,6 +160,7 @@ class Collect3D:
             "pcd_rotation",
             "lidar_path",
             "transformation_3d_flow",
+            'scene_token'
         ),
     ):
         self.keys = keys
@@ -184,7 +185,7 @@ class Collect3D:
             if key not in self.meta_keys:
                 data[key] = results[key]
         for key in self.meta_keys:
-            if key in results:
+            if key in results and key != 'scene_token':
                 val = np.array(results[key])
                 if isinstance(results[key], list):
                     data[key] = DC(to_tensor(val), stack=True)

@@ -106,6 +106,24 @@ class BEVFusion(Base3DFusionModel):
 
         self.init_weights()
 
+        self.zero_tensor_ratio = 0.0
+        self.feature_type = None
+        self.zero_tensor_scenes = set()
+        self.all_scene_tokens = []
+
+    def set_zero_tensor_params(self, feature_type, ratio, all_scene_tokens):
+        self.feature_type = feature_type
+        self.zero_tensor_ratio = ratio
+        self.all_scene_tokens = all_scene_tokens
+        num_zero_scenes = int(len(all_scene_tokens) * ratio)
+        self.zero_tensor_scenes = set(random.sample(all_scene_tokens, num_zero_scenes))
+        print(f"Total scenes: {len(all_scene_tokens)}")
+        print(f"Number of scenes with zero tensors: {num_zero_scenes}")
+        print(f"Scenes with zero tensors: {sorted(list(self.zero_tensor_scenes))}")
+
+    def should_zero_tensor(self, scene_token):
+        return scene_token in self.zero_tensor_scenes
+
     def init_weights(self) -> None:
         if "camera" in self.encoders:
             self.encoders["camera"]["backbone"].init_weights()
@@ -319,6 +337,10 @@ class BEVFusion(Base3DFusionModel):
         if self.costum_args:
             feature_type = self.costum_args["feature_type"]
         
+        import pdb; pdb.set_trace()
+        scene_token = metas[0]['scene_token']
+        zero_this_scene = self.should_zero_tensor(scene_token)
+
         for sensor in (
             self.encoders if self.training else list(self.encoders.keys())[::-1]
         ):
@@ -351,7 +373,7 @@ class BEVFusion(Base3DFusionModel):
             else:
                 raise ValueError(f"unsupported sensor: {sensor}")
 
-            if self.costum_args:
+            if self.costum_args and zero_this_scene:
                 n = self.costum_args["empty_tensor"]
                 if n == "img" and sensor == "camera":
                     feature = torch.zeros_like(feature)

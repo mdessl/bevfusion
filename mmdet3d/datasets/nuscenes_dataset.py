@@ -144,6 +144,7 @@ class NuScenesDataset(Custom3DDataset):
     ) -> None:
         self.load_interval = load_interval
         self.use_valid_flag = use_valid_flag
+        dataset_root = "data/nuscenes/"
         super().__init__(
             dataset_root=dataset_root,
             ann_file=ann_file,
@@ -214,7 +215,6 @@ class NuScenesDataset(Custom3DDataset):
 
     def get_data_info(self, index: int) -> Dict[str, Any]:
         info = self.data_infos[index]
-
         data = dict(
             token=info["token"],
             sample_idx=info['token'],
@@ -223,6 +223,7 @@ class NuScenesDataset(Custom3DDataset):
             timestamp=info["timestamp"],
             location=info.get('location', None), 
             radar=info.get('radars', None), 
+            scene_token=info['scene_token']
         )
 
         if data['location'] is None:

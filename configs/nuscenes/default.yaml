@@ -1,5 +1,5 @@
 dataset_type: NuScenesDataset
-dataset_root: data_trainval/nuscenes/
+dataset_root: data/nuscenes/
 gt_paste_stop_epoch: -1
 reduce_beams: 32
 load_dim: 5
@@ -183,6 +183,7 @@ train_pipeline:
       - lidar2image
       - img_aug_matrix
       - lidar_aug_matrix
+      - scene_token
   -
     type: GTDepth
     keyframe_only: true 
@@ -259,12 +260,13 @@ test_pipeline:
       - lidar2image
       - img_aug_matrix
       - lidar_aug_matrix
+      - scene_token
   -
     type: GTDepth
     keyframe_only: true 
 
 data:
-  samples_per_gpu: 4
+  samples_per_gpu: 1
   workers_per_gpu: 4
   train:
     type: CBGSDataset

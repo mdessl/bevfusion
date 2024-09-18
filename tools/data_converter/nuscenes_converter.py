@@ -194,6 +194,7 @@ def _fill_trainval_infos(nusc,
         info["location"] = nusc.get(
         "log", nusc.get("scene", sample["scene_token"])["log_token"]
         )["location"]
+        info['scene_token'] = sample['scene_token']
         l2e_r = info['lidar2ego_rotation']
         l2e_t = info['lidar2ego_translation']
         e2g_r = info['ego2global_rotation']
