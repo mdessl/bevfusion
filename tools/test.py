@@ -3,6 +3,8 @@ import copy
 import os
 import warnings
 import json
+import matplotlib.pyplot as plt
+import numpy as np
 
 import mmcv
 import torch
@@ -96,7 +98,6 @@ def parse_args():
     )
     parser.add_argument("--local_rank", type=int, default=0)
 
-
     parser.add_argument(
         '--feature-type',
         type=str,
@@ -115,9 +116,20 @@ def parse_args():
     parser.add_argument(
         '--zero-tensor-ratio',
         type=float,
-        choices=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        default=1.,
+        choices=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+        default=1.0,
         help='Ratio of scenes to replace the specified feature type with zero tensors (0.0 to 1.0)'
+    )
+    parser.add_argument(
+        '--run-experiment',
+        action='store_true',
+        help='Run the experiment with multiple zero-tensor-ratio values'
+    )
+    parser.add_argument(
+        '--plot-output',
+        type=str,
+        default='evaluation_plot.png',
+        help='Output file path for the evaluation plot'
     )
     args = parser.parse_args()
     if "LOCAL_RANK" not in os.environ:
@@ -135,11 +147,11 @@ def parse_args():
     with open('custom_args.json', 'w') as f:
         json.dump({'empty_tensor':getattr(args, 'empty_tensor'), 'feature_type':getattr(args, 'feature_type')}, f)
 
+
     return args
 
-def main():
-    args = parse_args()
-    dist.init()
+def run_experiment(args, zero_tensor_ratio):
+    args.zero_tensor_ratio = zero_tensor_ratio
 
     torch.backends.cudnn.benchmark = True
     torch.cuda.set_device(dist.local_rank())
@@ -158,22 +170,17 @@ def main():
 
     configs.load(args.config, recursive=True)
     cfg = Config(recursive_eval(configs), filename=args.config)
-    #print(cfg)
-    #import pdb
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)
-    # set cudnn_benchmark
     if cfg.get("cudnn_benchmark", False):
         torch.backends.cudnn.benchmark = True
 
     cfg.model.pretrained = None
-    # in case the test dataset is concatenated
     samples_per_gpu = 1
     if isinstance(cfg.data.test, dict):
         cfg.data.test.test_mode = True
         samples_per_gpu = cfg.data.test.pop("samples_per_gpu", 1)
         if samples_per_gpu > 1:
-            # Replace 'ImageToTensor' to 'DefaultFormatBundle'
             cfg.data.test.pipeline = replace_ImageToTensor(cfg.data.test.pipeline)
     elif isinstance(cfg.data.test, list):
         for ds_cfg in cfg.data.test:
@@ -185,14 +192,11 @@ def main():
             for ds_cfg in cfg.data.test:
                 ds_cfg.pipeline = replace_ImageToTensor(ds_cfg.pipeline)
 
-    # init distributed env first, since logger depends on the dist info.
     distributed = True
 
-    # set random seeds
     if args.seed is not None:
         set_random_seed(args.seed, deterministic=args.deterministic)
 
-    # build the dataloader
     dataset = build_dataset(cfg.data.test)
     data_loader = build_dataloader(
         dataset,
@@ -202,7 +206,19 @@ def main():
         shuffle=False,
     )
 
-    # build the model and load checkpoint
+    custom_args = {
+        'empty_tensor': getattr(args, 'empty_tensor'),
+        'feature_type': getattr(args, 'feature_type'),
+        'zero_tensor_ratio': args.zero_tensor_ratio
+    }
+    
+    # Always include all_scenes
+    all_scenes = np.unique([d["metas"].data["scene_token"] for d in dataset]).tolist()
+    custom_args['all_scenes'] = all_scenes
+
+    with open('custom_args.json', 'w') as f:
+        json.dump(custom_args, f)
+
     cfg.model.train_cfg = None
     model = build_model(cfg.model, test_cfg=cfg.get("test_cfg"))
     fp16_cfg = cfg.get("fp16", None)
@@ -211,8 +227,6 @@ def main():
     checkpoint = load_checkpoint(model, args.checkpoint, map_location="cpu")
     if args.fuse_conv_bn:
         model = fuse_conv_bn(model)
-    # old versions did not save class info in checkpoints, this walkaround is
-    # for backward compatibility
     if "CLASSES" in checkpoint.get("meta", {}):
         model.CLASSES = checkpoint["meta"]["CLASSES"]
     else:
@@ -239,7 +253,6 @@ def main():
             dataset.format_results(outputs, **kwargs)
         if args.eval:
             eval_kwargs = cfg.get("evaluation", {}).copy()
-            # hard-code way to remove EvalHook args
             for key in [
                 "interval",
                 "tmpdir",
@@ -250,8 +263,33 @@ def main():
             ]:
                 eval_kwargs.pop(key, None)
             eval_kwargs.update(dict(metric=args.eval, **kwargs))
-            print(dataset.evaluate(outputs, **eval_kwargs))
+            result = dataset.evaluate(outputs, **eval_kwargs)
+            return result
 
+def main():
+    args = parse_args()
+    dist.init()
+
+    if args.run_experiment:
+        zero_tensor_ratios = [0.0, 0.5, 1.0]
+        results = []
+
+        for ratio in zero_tensor_ratios:
+            result = run_experiment(args, ratio)
+            results.append(result['object/map'])
+        
+        print(results)
+        plt.figure(figsize=(10, 6))
+        plt.plot(zero_tensor_ratios, results, marker='o')
+        plt.xlabel('Zero Tensor Ratio')
+        plt.ylabel('mAP')
+        plt.title('Evaluation Metric vs Zero Tensor Ratio')
+        plt.grid(True)
+        plt.savefig(args.plot_output)
+        print(f"Evaluation plot saved to {args.plot_output}")
+    else:
+        result = run_experiment(args, args.zero_tensor_ratio)
+        print(f"Evaluation result for zero_tensor_ratio {args.zero_tensor_ratio}: {result}")
 
 if __name__ == "__main__":
     main()

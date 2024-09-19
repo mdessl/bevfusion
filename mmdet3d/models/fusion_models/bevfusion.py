@@ -4,6 +4,7 @@ import torch
 from mmcv.runner import auto_fp16, force_fp32
 from torch import nn
 from torch.nn import functional as F
+import random
 
 from mmdet3d.models.builder import (
     build_backbone,
@@ -106,20 +107,20 @@ class BEVFusion(Base3DFusionModel):
 
         self.init_weights()
 
-        self.zero_tensor_ratio = 0.0
-        self.feature_type = None
-        self.zero_tensor_scenes = set()
-        self.all_scene_tokens = []
+        #if self.costum_args.get("empty_tensor", None):
+        self.set_zero_tensor_params()
 
-    def set_zero_tensor_params(self, feature_type, ratio, all_scene_tokens):
-        self.feature_type = feature_type
-        self.zero_tensor_ratio = ratio
-        self.all_scene_tokens = all_scene_tokens
-        num_zero_scenes = int(len(all_scene_tokens) * ratio)
-        self.zero_tensor_scenes = set(random.sample(all_scene_tokens, num_zero_scenes))
-        print(f"Total scenes: {len(all_scene_tokens)}")
+    def set_zero_tensor_params(self):
+        
+        #import pdb; pdb.set_trace()
+        self.feature_type = self.costum_args["empty_tensor"]
+        self.zero_tensor_ratio = self.costum_args["zero_tensor_ratio"]
+        self.all_scene_tokens = self.costum_args["all_scenes"]
+        num_zero_scenes = int(len(self.all_scene_tokens) * self.zero_tensor_ratio)
+        self.zero_tensor_scenes = list(set(random.sample(self.all_scene_tokens, num_zero_scenes)))
+        print(f"Total scenes: {len(self.all_scene_tokens)}")
         print(f"Number of scenes with zero tensors: {num_zero_scenes}")
-        print(f"Scenes with zero tensors: {sorted(list(self.zero_tensor_scenes))}")
+        print(f"Scenes with zero tensors: {sorted(self.zero_tensor_scenes)}")
 
     def should_zero_tensor(self, scene_token):
         return scene_token in self.zero_tensor_scenes
@@ -337,7 +338,6 @@ class BEVFusion(Base3DFusionModel):
         if self.costum_args:
             feature_type = self.costum_args["feature_type"]
         
-        import pdb; pdb.set_trace()
         scene_token = metas[0]['scene_token']
         zero_this_scene = self.should_zero_tensor(scene_token)
 
@@ -390,9 +390,10 @@ class BEVFusion(Base3DFusionModel):
         if len(features) == 1:
             assert len(features) == 1, features
             x = features[0]        
-        else self.fuser is not None:
+        elif self.fuser:
             x = self.fuser(features)
-
+        else:
+            raise("error")
         batch_size = x.shape[0]
 
         x = self.decoder["backbone"](x)
@@ -557,9 +558,10 @@ class BEVFusionSB(BEVFusion):
         if len(features) == 1:
             assert len(features) == 1, features
             x = features[0]        
-        else self.fuser is not None:
+        elif self.fuser:
             x = self.fuser(features)
-
+        else:
+            raise("error")
 
         batch_size = x.shape[0]
 

@@ -142,3 +142,4 @@ pretrained
 custom_args.json
 data_trainval.tar.gz
 bevfusion2.tar
+docker/slim.tar
