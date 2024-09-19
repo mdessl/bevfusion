@@ -18,7 +18,7 @@ from mmdet3d.models import FUSIONMODELS
 
 from .base import Base3DFusionModel
 
-__all__ = ["BEVFusion"]
+__all__ = ["BEVFusion", "BEVFusionSB"]
 
 
 
@@ -387,13 +387,11 @@ class BEVFusion(Base3DFusionModel):
             features = features[::-1]
 
         # Remove fusion step if only one feature type is used
-        if feature_type or len(features) == 1:
-            x = self.fuser(features)
-        elif self.fuser is not None:
-            x = self.fuser(features)
-        else:
+        if len(features) == 1:
             assert len(features) == 1, features
-            x = features[0]
+            x = features[0]        
+        else self.fuser is not None:
+            x = self.fuser(features)
 
         batch_size = x.shape[0]
 
@@ -449,3 +447,170 @@ class BEVFusion(Base3DFusionModel):
                     raise ValueError(f"unsupported head: {type}")
             return outputs
 
+@FUSIONMODELS.register_module()
+class BEVFusionSB(BEVFusion):
+    def __init__(
+        self,
+        encoders: Dict[str, Any],
+        fuser: Dict[str, Any],
+        decoder: Dict[str, Any],
+        heads: Dict[str, Any],
+        **kwargs,
+    ) -> None:
+        super().__init__(encoders, fuser, decoder, heads, **kwargs)
+        
+        # SBNet specific initialization
+        self.use_sbnet = kwargs.get('use_sbnet', False)
+        self.modality_switch_prob = kwargs.get('modality_switch_prob', 0.5)
+        
+        if self.use_sbnet:
+            self.modality_agnostic_encoder = self.build_modality_agnostic_encoder(encoders)
+
+    def build_modality_agnostic_encoder(self, encoders):
+        # Implementation of modality-agnostic encoder
+        # This is a placeholder and should be implemented based on your specific requirements
+        pass
+
+    def switch_modality(self):
+        # Implement modality switching logic
+        if random.random() < self.modality_switch_prob:
+            return random.choice(['camera', 'lidar'])
+        return 'both'
+
+
+    @auto_fp16(apply_to=("img", "points"))
+    def forward_single(
+        self,
+        img,
+        points,
+        camera2ego,
+        lidar2ego,
+        lidar2camera,
+        lidar2image,
+        camera_intrinsics,
+        camera2lidar,
+        img_aug_matrix,
+        lidar_aug_matrix,
+        metas,
+        depths=None,
+        radar=None,
+        gt_masks_bev=None,
+        gt_bboxes_3d=None,
+        gt_labels_3d=None,
+        **kwargs,
+    ):
+        features = []
+        auxiliary_losses = {}
+        if self.costum_args:
+            feature_type = self.costum_args["feature_type"]
+        
+        import pdb; pdb.set_trace()
+        scene_token = metas[0]['scene_token']
+        zero_this_scene = self.should_zero_tensor(scene_token)
+
+        for sensor in (
+            self.encoders if self.training else list(self.encoders.keys())[::-1]
+        ):
+            # Skip processing if it's not the specified feature type
+            if feature_type and sensor != feature_type:
+                continue
+            
+            if sensor == "camera":
+                feature = self.extract_camera_features(
+                    img,
+                    points,
+                    radar,
+                    camera2ego,
+                    lidar2ego,
+                    lidar2camera,
+                    lidar2image,
+                    camera_intrinsics,
+                    camera2lidar,
+                    img_aug_matrix,
+                    lidar_aug_matrix,
+                    metas,
+                    gt_depths=depths,
+                )
+                if self.use_depth_loss:
+                    feature, auxiliary_losses['depth'] = feature[0], feature[-1]
+            elif sensor == "lidar":
+                feature = self.extract_features(points, sensor)
+            elif sensor == "radar":
+                feature = self.extract_features(radar, sensor)
+            else:
+                raise ValueError(f"unsupported sensor: {sensor}")
+
+            if self.costum_args and zero_this_scene:
+                n = self.costum_args["empty_tensor"]
+                if n == "img" and sensor == "camera":
+                    feature = torch.zeros_like(feature)
+                elif n == "points" and sensor == "lidar":
+                    feature = torch.zeros_like(feature)
+
+            features.append(feature)
+
+        if not self.training:
+            # avoid OOM
+            features = features[::-1]
+
+        # Remove fusion step if only one feature type is used
+        if len(features) == 1:
+            assert len(features) == 1, features
+            x = features[0]        
+        else self.fuser is not None:
+            x = self.fuser(features)
+
+
+        batch_size = x.shape[0]
+
+        x = self.decoder["backbone"](x)
+        x = self.decoder["neck"](x)
+
+
+        if self.training:
+            outputs = {}
+            for type, head in self.heads.items():
+                if type == "object":
+                    pred_dict = head(x, metas)
+                    losses = head.loss(gt_bboxes_3d, gt_labels_3d, pred_dict)
+                elif type == "map":
+                    losses = head(x, gt_masks_bev)
+                else:
+                    raise ValueError(f"unsupported head: {type}")
+                for name, val in losses.items():
+                    if val.requires_grad:
+                        outputs[f"loss/{type}/{name}"] = val * self.loss_scale[type]
+                    else:
+                        outputs[f"stats/{type}/{name}"] = val
+            if self.use_depth_loss:
+                if 'depth' in auxiliary_losses:
+                    outputs["loss/depth"] = auxiliary_losses['depth']
+                else:
+                    raise ValueError('Use depth loss is true, but depth loss not found')
+            return outputs
+        else:
+            outputs = [{} for _ in range(batch_size)]
+            for type, head in self.heads.items():
+                if type == "object":
+                    pred_dict = head(x, metas)
+                    bboxes = head.get_bboxes(pred_dict, metas)
+                    for k, (boxes, scores, labels) in enumerate(bboxes):
+                        outputs[k].update(
+                            {
+                                "boxes_3d": boxes.to("cpu"),
+                                "scores_3d": scores.cpu(),
+                                "labels_3d": labels.cpu(),
+                            }
+                        )
+                elif type == "map":
+                    logits = head(x)
+                    for k in range(batch_size):
+                        outputs[k].update(
+                            {
+                                "masks_bev": logits[k].cpu(),
+                                "gt_masks_bev": gt_masks_bev[k].cpu(),
+                            }
+                        )
+                else:
+                    raise ValueError(f"unsupported head: {type}")
+            return outputs
