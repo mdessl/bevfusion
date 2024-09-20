@@ -33,5 +33,5 @@ RUN conda install python=3.8 && \
     pip install --no-cache-dir Pillow==8.4.0 tqdm torchpack && \
     MMCV_WITH_OPS=1 FORCE_CUDA=1 pip install --no-cache-dir mmcv==2.0.0rc1 -f https://download.openmmlab.com/mmcv/dist/cu113/torch1.10.0/index.html && \
     MMCV_WITH_OPS=1 FORCE_CUDA=1 pip install --no-cache-dir mmcv-full==1.4.0 -f https://download.openmmlab.com/mmcv/dist/cu113/torch1.10.0/index.html && \
-    pip install --no-cache-dir mmdet==2.20.0 mpi4py==3.0.3 numba==0.48.0 yapf==0.40.1 setuptools==59.5.0 flash-attn==0.2.0 numpy==1.23.0 && \
+    pip install --no-cache-dir mmdet==2.20.0 mpi4py==3.0.3 numba==0.48.0 yapf==0.40.1 setuptools==59.5.0 flash-attn==0.2.0 numpy==1.23.0 nuscenes-devkit && \
     conda clean -afy

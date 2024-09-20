@@ -22,7 +22,7 @@ RUN MMCV_WITH_OPS=1 FORCE_CUDA=1 pip install mmcv==2.0.0rc1 -f https://download.
 RUN MMCV_WITH_OPS=1 FORCE_CUDA=1 pip install mmcv-full==1.4.0 -f https://download.openmmlab.com/mmcv/dist/cu113/torch1.10.0/index.html
 
 RUN pip install mmdet==2.20.0
-#RUN pip install nuscenes-desvkit
+RUN pip install nuscenes-devkit
 RUN pip install mpi4py==3.0.3
 RUN pip install numba==0.48.0
 
