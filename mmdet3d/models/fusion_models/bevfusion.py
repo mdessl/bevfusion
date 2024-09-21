@@ -338,14 +338,15 @@ class BEVFusion(Base3DFusionModel):
         if self.costum_args:
             feature_type = self.costum_args["feature_type"]
         
-        scene_token = metas[0]['scene_token']
+        scene_token = metas[0].get('scene_token', None)
         zero_this_scene = self.should_zero_tensor(scene_token)
+        sbnet_modality = metas[0].get('sbnet_modality', None)
 
         for sensor in (
             self.encoders if self.training else list(self.encoders.keys())[::-1]
         ):
             # Skip processing if it's not the specified feature type
-            if feature_type and sensor != feature_type:
+            if feature_type and sensor != feature_type or sbnet_modality and sensor != sbnet_modality:
                 continue
             
             if sensor == "camera":
@@ -387,7 +388,8 @@ class BEVFusion(Base3DFusionModel):
             features = features[::-1]
 
         # Remove fusion step if only one feature type is used
-        if len(features) == 1:
+        import pdb; pdb.set_trace()
+        if len(features) == 1 or sbnet_modality:
             assert len(features) == 1, features
             x = features[0]        
         elif self.fuser:

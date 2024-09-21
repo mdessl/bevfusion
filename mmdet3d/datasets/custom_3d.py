@@ -63,8 +63,16 @@ class Custom3DDataset(Dataset):
 
         self.CLASSES = self.get_classes(classes)
         self.cat2id = {name: i for i, name in enumerate(self.CLASSES)}
-        self.data_infos = self.load_annotations(self.ann_file)
+        self.data_infos = self.load_annotations(self.ann_file) 
+        self.lidar = self.load_annotations(self.ann_file)
 
+        for info in self.data_infos:
+            info['sbnet_modality'] = "camera"
+
+        for info in self.lidar:
+            info['sbnet_modality'] = "lidar"
+        
+        self.data_infos.extend(self.lidar)
         if pipeline is not None:
             self.pipeline = Compose(pipeline)
 

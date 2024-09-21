@@ -10,9 +10,10 @@ from mmcv import Config
 from torchpack import distributed as dist
 from torchpack.environ import auto_set_run_dir, set_run_dir
 from torchpack.utils.config import configs
+from mmcv.runner import load_checkpoint
 
 from mmdet3d.apis import train_model
-from mmdet3d.datasets import build_dataset
+from mmdet3d.datasets import build_dataset, nuscenes_dataset
 from mmdet3d.models import build_model
 from mmdet3d.utils import get_root_logger, convert_sync_batchnorm, recursive_eval
 
@@ -22,6 +23,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("config", metavar="FILE", help="config file")
+    parser.add_argument("--checkpoint", help="checkpoint file") # pretrained/bevfusion-seg.pth
     parser.add_argument("--run-dir", metavar="DIR", help="run directory")
     args, opts = parser.parse_known_args()
 
@@ -65,8 +67,12 @@ def main():
 
     datasets = [build_dataset(cfg.data.train)]
 
+    #datasets[0].dataset = nuscenes_dataset.MergedNuScenesDataset(datasets[0].dataset, datasets[0].dataset, ann_file=datasets[0].dataset.ann_file)
+
+
     model = build_model(cfg.model)
     model.init_weights()
+
     if cfg.get("sync_bn", None):
         if not isinstance(cfg["sync_bn"], dict):
             cfg["sync_bn"] = dict(exclude=[])

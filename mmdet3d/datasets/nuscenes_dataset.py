@@ -128,7 +128,7 @@ class NuScenesDataset(Custom3DDataset):
 
     def __init__(
         self,
-        ann_file,
+        ann_file=None,
         pipeline=None,
         dataset_root=None,
         object_classes=None,
@@ -142,6 +142,8 @@ class NuScenesDataset(Custom3DDataset):
         eval_version="detection_cvpr_2019",
         use_valid_flag=False,
     ) -> None:
+        print(ann_file)
+        self.ann_file = ann_file
         self.load_interval = load_interval
         self.use_valid_flag = use_valid_flag
         dataset_root = "data/nuscenes/"
@@ -223,7 +225,8 @@ class NuScenesDataset(Custom3DDataset):
             timestamp=info["timestamp"],
             location=info.get('location', None), 
             radar=info.get('radars', None), 
-            scene_token=info['scene_token']
+            scene_token=info['scene_token'],
+            sbnet_modality=info.get('sbnet_modality', None), 
         )
 
         if data['location'] is None:
@@ -733,3 +736,40 @@ def lidar_nusc_box_to_global(
         box.translate(np.array(info["ego2global_translation"]))
         box_list.append(box)
     return box_list
+
+
+class MergedNuScenesDataset(NuScenesDataset):
+    def __init__(self, dataset1, dataset2, **kwargs):
+        super().__init__(**kwargs)
+        self.dataset1 = dataset1
+        self.dataset2 = dataset2
+        
+        # Merge data_infos
+        self.data_infos = dataset1.data_infos + dataset2.data_infos
+        
+        # Merge other relevant attributes
+        self.metadata = {**dataset1.metadata, **dataset2.metadata}
+        self.version = dataset1.version  # Assuming both datasets have the same version
+        
+        # Add modality_sdnet attribute
+        self.modality_sdnet = ['img'] * len(dataset1) + ['lidar'] * len(dataset2)
+    
+    def __len__(self):
+        return len(self.data_infos)
+    
+    def get_data_info(self, index):
+        info = self.dataset1.get_data_info(index) if index < len(self.dataset1) else self.dataset2.get_data_info(index - len(self.dataset1))
+        info['modality_sdnet'] = self.modality_sdnet[index]
+        return info
+    
+    def prepare_train_data(self, index):
+        data = self.dataset1.prepare_train_data(index) if index < len(self.dataset1) else self.dataset2.prepare_train_data(index - len(self.dataset1))
+        if data is not None:
+            data['modality_sdnet'] = self.modality_sdnet[index]
+        return data
+    
+    def prepare_test_data(self, index):
+        data = self.dataset1.prepare_test_data(index) if index < len(self.dataset1) else self.dataset2.prepare_test_data(index - len(self.dataset1))
+        if data is not None:
+            data['modality_sdnet'] = self.modality_sdnet[index]
+        return data
