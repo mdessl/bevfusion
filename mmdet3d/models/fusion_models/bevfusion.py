@@ -388,7 +388,6 @@ class BEVFusion(Base3DFusionModel):
             features = features[::-1]
 
         # Remove fusion step if only one feature type is used
-        import pdb; pdb.set_trace()
         if len(features) == 1 or sbnet_modality:
             assert len(features) == 1, features
             x = features[0]        
@@ -398,6 +397,15 @@ class BEVFusion(Base3DFusionModel):
             raise("error")
         batch_size = x.shape[0]
 
+        if sbnet_modality == "camera":
+            
+            channel_correction = nn.Conv2d(in_channels=80, out_channels=256, kernel_size=1).half().cuda()
+            x = channel_correction(x)
+
+        elif sbnet_modality == "lidar":
+            #channel_correction = nn.Conv2d(in_channels=80, out_channels=256, kernel_size=1).half().cuda()
+            #x = channel_correction(x)
+            pass
         x = self.decoder["backbone"](x)
         x = self.decoder["neck"](x)
 

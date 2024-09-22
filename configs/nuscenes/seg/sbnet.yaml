@@ -129,4 +129,5 @@ lr_config:
 momentum_config:
   policy: cyclic
 
-load_from: pretrained/bevfusion-seg.pth
+load_from: runs/run-8ab6e45b/latest.pth
+freeze_sbnet: true

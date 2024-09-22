@@ -16,6 +16,34 @@ from mmdet.core import DistEvalHook
 from mmdet.datasets import build_dataloader, build_dataset, replace_ImageToTensor
 
 
+import torch.nn as nn
+
+def add_layer_channel_correction(model, output_channels=256):
+    # Get the current layers of the downsample module
+    current_layers = list(model.encoders.camera.neck.vtransform.downsample.children())
+    
+    # Get the number of input channels from the last convolutional layer
+    input_channels = current_layers[-3].out_channels  # Assuming the last Conv2d is 3 positions from the end
+    
+    # Create the new layers you want to add
+    new_conv = nn.Conv2d(input_channels, output_channels, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+    new_relu = nn.ReLU(inplace=True)
+    
+    # Add the new conv layer at index 9 (after the last ReLU)
+    current_layers.insert(9, new_conv)
+    
+    # Add the new ReLU at index 10
+    current_layers.insert(10, new_relu)
+    
+    # Create a new Sequential module with the updated layers
+    new_downsample = nn.Sequential(*current_layers)
+    
+    # Replace the old downsample module with the new one
+    model.encoders.camera.neck.vtransform.downsample = new_downsample
+    
+    return model
+
+
 def train_model(
     model,
     dataset,
@@ -41,7 +69,19 @@ def train_model(
         for ds in dataset
     ]
 
+    if cfg.get("freeze_sbnet", None):
+        for param in model.encoder.parameters():
+            param.requires_grad = False
+
+        if len(list(model.encoders.camera.neck.vtransform.downsample.children)) == 8:
+            model = add_layer_channel_correction(model) # from 80 zo 25
+        for param in model.encoders.camera.neck.vtransform.downsample.parameters():
+            param.requires_grad = True
+            
+    print(sum(p.numel() for p in model.parameters() if p.requires_grad))
+
     # put model on gpus
+    #print("find_unused_parameters was set to False before in apis, train.py")
     find_unused_parameters = cfg.get("find_unused_parameters", False)
     # Sets the `find_unused_parameters` parameter in
     # torch.nn.parallel.DistributedDataParallel

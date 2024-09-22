@@ -69,7 +69,6 @@ def main():
 
     #datasets[0].dataset = nuscenes_dataset.MergedNuScenesDataset(datasets[0].dataset, datasets[0].dataset, ann_file=datasets[0].dataset.ann_file)
 
-
     model = build_model(cfg.model)
     model.init_weights()
 
