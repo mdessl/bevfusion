@@ -69,10 +69,11 @@ def train_model(
         for ds in dataset
     ]
 
+
     if cfg.get("freeze_sbnet", None):
         for param in model.encoders.parameters():
             param.requires_grad = False
-        if len(list(model.encoders.camera.vtransform.downsample.children())) == 8:
+        if len(list(model.encoders.camera.vtransform.downsample.children())) == 9:
             model = add_layer_channel_correction(model) # from 80 zo 25
         for param in model.encoders.camera.vtransform.downsample.parameters():
             param.requires_grad = True
