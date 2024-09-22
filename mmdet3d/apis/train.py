@@ -20,7 +20,7 @@ import torch.nn as nn
 
 def add_layer_channel_correction(model, output_channels=256):
     # Get the current layers of the downsample module
-    current_layers = list(model.encoders.camera.neck.vtransform.downsample.children())
+    current_layers = list(model.encoders.camera.vtransform.downsample.children())
     
     # Get the number of input channels from the last convolutional layer
     input_channels = current_layers[-3].out_channels  # Assuming the last Conv2d is 3 positions from the end
@@ -39,7 +39,7 @@ def add_layer_channel_correction(model, output_channels=256):
     new_downsample = nn.Sequential(*current_layers)
     
     # Replace the old downsample module with the new one
-    model.encoders.camera.neck.vtransform.downsample = new_downsample
+    model.encoders.camera.vtransform.downsample = new_downsample
     
     return model
 
@@ -70,19 +70,18 @@ def train_model(
     ]
 
     if cfg.get("freeze_sbnet", None):
-        for param in model.encoder.parameters():
+        for param in model.encoders.parameters():
             param.requires_grad = False
-
-        if len(list(model.encoders.camera.neck.vtransform.downsample.children)) == 8:
+        if len(list(model.encoders.camera.vtransform.downsample.children())) == 8:
             model = add_layer_channel_correction(model) # from 80 zo 25
-        for param in model.encoders.camera.neck.vtransform.downsample.parameters():
+        for param in model.encoders.camera.vtransform.downsample.parameters():
             param.requires_grad = True
-            
+
     print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 
     # put model on gpus
     #print("find_unused_parameters was set to False before in apis, train.py")
-    find_unused_parameters = cfg.get("find_unused_parameters", False)
+    find_unused_parameters = cfg.get("find_unused_parameters", True)
     # Sets the `find_unused_parameters` parameter in
     # torch.nn.parallel.DistributedDataParallel
     model = MMDistributedDataParallel(
