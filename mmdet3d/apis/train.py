@@ -41,6 +41,13 @@ def add_layer_channel_correction(model, output_channels=256):
     # Replace the old downsample module with the new one
     model.encoders.camera.vtransform.downsample = new_downsample
     
+    model_state_dict = model.state_dict()
+    model_state_dict['encoders.camera.vtransform.downsample.9.weight'] = new_conv.weight
+    
+    torch.save(model.state_dict(), "model.pth")    
+    x = torch.load("model.pth")  
+    import pdb; pdb.set_trace()
+    
     return model
 
 

@@ -108,7 +108,7 @@ class BEVFusion(Base3DFusionModel):
         self.init_weights()
 
         #if self.costum_args.get("empty_tensor", None):
-        self.set_zero_tensor_params()
+        #self.set_zero_tensor_params()
 
     def set_zero_tensor_params(self):
         
@@ -339,7 +339,10 @@ class BEVFusion(Base3DFusionModel):
             feature_type = self.costum_args["feature_type"]
         
         scene_token = metas[0].get('scene_token', None)
-        zero_this_scene = self.should_zero_tensor(scene_token)
+        if self.costum_args.get("all_scenes", None):
+            zero_this_scene = self.should_zero_tensor(scene_token)
+        else:
+            zero_this_scene = False
         sbnet_modality = metas[0].get('sbnet_modality', None)
 
         for sensor in (
@@ -397,15 +400,7 @@ class BEVFusion(Base3DFusionModel):
             raise("error")
         batch_size = x.shape[0]
 
-        if sbnet_modality == "camera":
-            
-            channel_correction = nn.Conv2d(in_channels=80, out_channels=256, kernel_size=1).half().cuda()
-            x = channel_correction(x)
 
-        elif sbnet_modality == "lidar":
-            #channel_correction = nn.Conv2d(in_channels=80, out_channels=256, kernel_size=1).half().cuda()
-            #x = channel_correction(x)
-            pass
         x = self.decoder["backbone"](x)
         x = self.decoder["neck"](x)
 
