@@ -197,6 +197,7 @@ def run_experiment(args, zero_tensor_ratio):
     if args.seed is not None:
         set_random_seed(args.seed, deterministic=args.deterministic)
 
+    
     dataset = build_dataset(cfg.data.test)
     data_loader = build_dataloader(
         dataset,

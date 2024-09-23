@@ -301,7 +301,7 @@ data:
     modality: ${input_modality}
     test_mode: true
     box_type_3d: LiDAR
-
+#validscenes_n10
 evaluation:
   interval: 1
   pipeline: ${test_pipeline}

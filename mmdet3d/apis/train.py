@@ -18,7 +18,7 @@ from mmdet.datasets import build_dataloader, build_dataset, replace_ImageToTenso
 
 import torch.nn as nn
 
-def add_layer_channel_correction(model, output_channels=256):
+def add_layer_channel_correction(model, output_channels=256, state_dict_path="pretrained/bevfusion-seg.pth"):
     # Get the current layers of the downsample module
     current_layers = list(model.encoders.camera.vtransform.downsample.children())
     
@@ -38,15 +38,18 @@ def add_layer_channel_correction(model, output_channels=256):
     # Create a new Sequential module with the updated layers
     new_downsample = nn.Sequential(*current_layers)
     
-    # Replace the old downsample module with the new one
     model.encoders.camera.vtransform.downsample = new_downsample
     
-    model_state_dict = model.state_dict()
-    model_state_dict['encoders.camera.vtransform.downsample.9.weight'] = new_conv.weight
+    # Load the state dict if a path is provided
+    if state_dict_path:
+        state_dict = torch.load(state_dict_path)
+        model.load_state_dict(state_dict, strict=False)
     
-    torch.save(model.state_dict(), "model.pth")    
-    x = torch.load("model.pth")  
-    import pdb; pdb.set_trace()
+    # Initialize the new conv layer if it's not in the loaded state dict
+    if 'encoders.camera.vtransform.downsample.9.weight' not in model.state_dict():
+        model_state_dict = model.state_dict()
+        model_state_dict['encoders.camera.vtransform.downsample.9.weight'] = new_conv.weight
+        model.load_state_dict(model_state_dict)
     
     return model
 
@@ -80,8 +83,13 @@ def train_model(
     if cfg.get("freeze_sbnet", None):
         for param in model.encoders.parameters():
             param.requires_grad = False
+        
+        state_dict_path = "pretrained/bevfusion-seg.pth"
         if len(list(model.encoders.camera.vtransform.downsample.children())) == 9:
-            model = add_layer_channel_correction(model) # from 80 zo 25
+            model = add_layer_channel_correction(model, 256, state_dict_path) # from 80 zo 25
+        else:
+            state_dict = torch.load(state_dict_path)
+            model.load_state_dict(state_dict, strict=False)
         for param in model.encoders.camera.vtransform.downsample.parameters():
             param.requires_grad = True
 

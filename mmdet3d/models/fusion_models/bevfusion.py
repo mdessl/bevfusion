@@ -108,7 +108,7 @@ class BEVFusion(Base3DFusionModel):
         self.init_weights()
 
         #if self.costum_args.get("empty_tensor", None):
-        #self.set_zero_tensor_params()
+        #    self.set_zero_tensor_params()
 
     def set_zero_tensor_params(self):
         

@@ -65,12 +65,14 @@ class Custom3DDataset(Dataset):
         self.cat2id = {name: i for i, name in enumerate(self.CLASSES)}
         self.data_infos = self.load_annotations(self.ann_file) 
         self.lidar = self.load_annotations(self.ann_file)
-
-        for info in self.lidar:
-            info['sbnet_modality'] = "lidar"
         
-        for info in self.data_infos:
-            info['sbnet_modality'] = "camera"
+        if not self.test_mode:
+            print("No testmode: Setting sbnet modality")
+            for info in self.lidar:
+                info['sbnet_modality'] = "lidar"
+            
+            for info in self.data_infos:
+                info['sbnet_modality'] = "camera"
 
 
         self.data_infos.extend(self.lidar)
