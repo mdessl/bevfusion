@@ -113,12 +113,11 @@ class BEVFusion(Base3DFusionModel):
 
         self.init_weights()
 
-        # if self.costum_args.get("empty_tensor", None):
-        #    self.set_zero_tensor_params()
+        if self.costum_args.get("empty_tensor", None):
+            self.set_zero_tensor_params()
 
     def set_zero_tensor_params(self):
 
-        # import pdb; pdb.set_trace()
         self.feature_type = self.costum_args["empty_tensor"]
         self.zero_tensor_ratio = self.costum_args["zero_tensor_ratio"]
         self.all_scene_tokens = self.costum_args["all_scenes"]
@@ -370,15 +369,8 @@ class BEVFusion(Base3DFusionModel):
     ):
         features = []
         auxiliary_losses = {}
-        if self.costum_args:
-            feature_type = self.costum_args["feature_type"]
-
-        scene_token = metas[0].get("scene_token", None)
-        if self.costum_args.get("all_scenes", None):
-            zero_this_scene = self.should_zero_tensor(scene_token)
-        else:
-            zero_this_scene = False
-        sbnet_modality = metas[0].get("sbnet_modality", None)
+        feature_type = self.get("feature_type", None)
+        sbnet_modality = self.get("sbnet_modality", None)
 
         for sensor in (
             self.encoders if self.training else list(self.encoders.keys())[::-1]
@@ -416,13 +408,6 @@ class BEVFusion(Base3DFusionModel):
                 feature = self.extract_features(radar, sensor)
             else:
                 raise ValueError(f"unsupported sensor: {sensor}")
-
-            if self.costum_args and zero_this_scene:
-                n = self.costum_args["empty_tensor"]
-                if n == "img" and sensor == "camera":
-                    feature = torch.zeros_like(feature)
-                elif n == "points" and sensor == "lidar":
-                    feature = torch.zeros_like(feature)
 
             features.append(feature)
 
