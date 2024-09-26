@@ -73,7 +73,7 @@ class DepthLSSTransform(BaseDepthTransform):
                 nn.ReLU(True),
                 nn.Conv2d(out_channels, out_channels, 3, padding=1, bias=False),
                 nn.BatchNorm2d(out_channels),
-                nn.ReLU(True),
+                nn.ReLU(True)
             )
         else:
             self.downsample = nn.Identity()

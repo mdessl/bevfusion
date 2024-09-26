@@ -20,6 +20,7 @@ from mmdet3d.models import build_model
 from mmdet.apis import multi_gpu_test, set_random_seed
 from mmdet.datasets import replace_ImageToTensor
 from mmdet3d.utils import recursive_eval
+from tools.utils import get_all_scenes, add_layer_channel_correction
 
 def parse_args():
     parser = argparse.ArgumentParser(description="MMDet test (and eval) a model")
@@ -116,12 +117,17 @@ def parse_args():
     parser.add_argument(
         '--zero-tensor-ratio',
         type=float,
-        choices=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+        choices=[0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0],
         default=1.0,
         help='Ratio of scenes to replace the specified feature type with zero tensors (0.0 to 1.0)'
     )
     parser.add_argument(
         '--run-experiment',
+        action='store_true',
+        help='Run the experiment with multiple zero-tensor-ratio values'
+    )
+    parser.add_argument(
+        '--use-sbnet',
         action='store_true',
         help='Run the experiment with multiple zero-tensor-ratio values'
     )
@@ -150,8 +156,7 @@ def parse_args():
 
     return args
 
-def run_experiment(args, zero_tensor_ratio):
-    args.zero_tensor_ratio = zero_tensor_ratio
+def run_experiment(args):
 
     torch.backends.cudnn.benchmark = True
     torch.cuda.set_device(dist.local_rank())
@@ -210,12 +215,13 @@ def run_experiment(args, zero_tensor_ratio):
     custom_args = {
         'empty_tensor': getattr(args, 'empty_tensor'),
         'feature_type': getattr(args, 'feature_type'),
+        'use_sbnet': getattr(args, 'use_sbnet'),
         'zero_tensor_ratio': args.zero_tensor_ratio
     }
     
     # Always include all_scenes
-    all_scenes = np.unique([d["metas"].data["scene_token"] for d in dataset]).tolist()
-    custom_args['all_scenes'] = all_scenes
+    #all_scenes = np.unique([d["metas"].data["scene_token"] for d in dataset]).tolist()
+    custom_args['all_scenes'] = get_all_scenes(cfg.data.val.ann_file)
 
     with open('custom_args.json', 'w') as f:
         json.dump(custom_args, f)
@@ -225,6 +231,8 @@ def run_experiment(args, zero_tensor_ratio):
     fp16_cfg = cfg.get("fp16", None)
     if fp16_cfg is not None:
         wrap_fp16_model(model)
+    if args.use_sbnet:
+        model = add_layer_channel_correction(model, state_dict_path=args.checkpoint)
     checkpoint = load_checkpoint(model, args.checkpoint, map_location="cpu")
     if args.fuse_conv_bn:
         model = fuse_conv_bn(model)
@@ -267,6 +275,18 @@ def run_experiment(args, zero_tensor_ratio):
             result = dataset.evaluate(outputs, **eval_kwargs)
             return result
 
+
+def plot_results(zero_tensor_ratios, results, task, modality, output_file):
+    plt.figure(figsize=(10, 6))
+    plt.plot(zero_tensor_ratios, results, marker='o')
+    plt.xlabel('Zero Tensor Ratio (on scene level)')
+    plt.ylabel(f'{task.upper()}')
+    plt.title(f'Performance when {modality} modality is replaced by zero tensor with different ratios')
+    plt.grid(True)
+    plt.savefig(output_file)
+    plt.close()
+    print(f"Evaluation plot saved to {output_file}")
+
 def main():
     args = parse_args()
     dist.init()
@@ -276,7 +296,8 @@ def main():
         results = []
 
         for ratio in zero_tensor_ratios:
-            result = run_experiment(args, ratio)
+            args.zero_tensor_ratio = ratio
+            result = run_experiment(args)
             results.append(result['object/map'])
         
         print(results)
@@ -290,6 +311,35 @@ def main():
         print(f"Evaluation plot saved to {args.plot_output}")
     else:
         result = run_experiment(args, args.zero_tensor_ratio)
+        print(f"Evaluation result for zero_tensor_ratio {args.zero_tensor_ratio}: {result}")
+
+def main():
+    args = parse_args()
+    dist.init()
+
+    if args.run_experiment:
+        zero_tensor_ratios = [0,0.5,1.0]
+        tasks = {'map':"map/mean/iou@max"}
+        modalities = ['camera','lidar']
+
+        for name, metric in tasks.items():
+            for modality in modalities:
+                args.empty_tensor = 'img' if modality == 'camera' else 'points'
+                args.feature_type = modality
+                args.eval = [name]
+                results = []
+
+                for ratio in zero_tensor_ratios:
+                    args.zero_tensor_ratio = ratio
+                    result = run_experiment(args)
+                    print(result)
+                    results.append(result[metric])
+                print(f"Results for {name} task, {modality} modality: {results}")
+                
+                output_file = f'{args.plot_output}_{name}_{modality}.png'
+                plot_results(zero_tensor_ratios, results, name, modality, output_file)
+    else:
+        result = run_experiment(args)
         print(f"Evaluation result for zero_tensor_ratio {args.zero_tensor_ratio}: {result}")
 
 if __name__ == "__main__":

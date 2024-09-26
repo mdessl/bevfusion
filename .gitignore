@@ -144,3 +144,7 @@ data_trainval.tar.gz
 bevfusion2.tar
 docker/slim.tar
 nuscenes_mini.tar.gz
+evaluation_plot.png_map_camera.png
+evaluation_plot.png_map_lidar.png
+sbnet_evaluation_plot.png_map_camera.png
+sbnet_evaluation_plot.png_map_lidar.png
