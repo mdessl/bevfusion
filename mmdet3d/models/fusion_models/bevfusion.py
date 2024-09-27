@@ -112,7 +112,6 @@ class BEVFusion(Base3DFusionModel):
 
         self.init_weights()
 
-        self.use_sbnet = True
         if self.costum_args.get("empty_tensor", None):
             self.set_zero_tensor_params()
 
@@ -120,7 +119,8 @@ class BEVFusion(Base3DFusionModel):
                 self.use_sbnet = True
             else:
                 self.use_sbnet = False
-                
+        self.use_sbnet = False
+     
 
     def set_zero_tensor_params(self):
 

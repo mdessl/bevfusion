@@ -67,5 +67,4 @@ def filter_and_save_first_10_scenes(input_path, output_path):
 
 
 #filter_and_save_first_10_scenes("/root/quick/Kopie von nuscenes_infos_val.pkl", "/root/bevfusion/data/nuscenes/nuscenes_infos_test_10.pkl")
-x = get_all_scenes("/root/bevfusion/data/nuscenes/nuscenes_infos_test_10.pkl")
-print(len(x))
+#filter_and_save_first_10_scenes("/root/bevfusion/data/nuscenes/nuscenes_infos_val.pkl", "/root/bevfusion/data/nuscenes/nuscenes_infos_test_10.pkl")

@@ -181,7 +181,6 @@ def run_experiment(args):
         torch.backends.cudnn.benchmark = True
 
     cfg.model.pretrained = None
-    samples_per_gpu = 1
     if isinstance(cfg.data.test, dict):
         cfg.data.test.test_mode = True
         samples_per_gpu = cfg.data.test.pop("samples_per_gpu", 1)
@@ -196,8 +195,9 @@ def run_experiment(args):
         if samples_per_gpu > 1:
             for ds_cfg in cfg.data.test:
                 ds_cfg.pipeline = replace_ImageToTensor(ds_cfg.pipeline)
-
-    distributed = True
+    samples_per_gpu = 1
+    #import pdb; pdb.set_trace()
+    distributed = False
 
     if args.seed is not None:
         set_random_seed(args.seed, deterministic=args.deterministic)
@@ -318,7 +318,7 @@ def main():
     dist.init()
 
     if args.run_experiment:
-        zero_tensor_ratios = [0,0.5,1.0]
+        zero_tensor_ratios = [0.0, 0.5, 1.0]
         tasks = {'map':"map/mean/iou@max"}
         modalities = ['camera','lidar']
 
