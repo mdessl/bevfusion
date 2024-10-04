@@ -69,3 +69,50 @@ def filter_and_save_first_10_scenes(input_path, output_path):
 #filter_and_save_first_10_scenes("/root/quick/Kopie von nuscenes_infos_val.pkl", "/root/bevfusion/data/nuscenes/nuscenes_infos_test_10.pkl")
 #filter_and_save_first_10_scenes("/root/bevfusion/data/nuscenes/nuscenes_infos_val.pkl", "/root/bevfusion/data/nuscenes/nuscenes_infos_test_10.pkl")
 
+import json
+import matplotlib.pyplot as plt
+
+def load_json(file_path):
+    with open(file_path, 'r') as f:
+        return json.load(f)
+
+def plot_and_save_dicts(dict1, dict2, label1, label2, title, xlabel, ylabel, output_file):
+    # Extract keys and values from both dictionaries
+    x1, y1 = zip(*sorted(dict1.items()))
+    x2, y2 = zip(*sorted(dict2.items()))
+
+    # Convert x-values to float (assuming they're numeric)
+    x1 = [float(x) for x in x1]
+    x2 = [float(x) for x in x2]
+
+    # Create the plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(x1, y1, label=label1, marker='o')
+    plt.plot(x2, y2, label=label2, marker='s')
+
+    # Customize the plot
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.legend()
+    plt.grid(True)
+
+    # Adjust layout and save the plot
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.close()  # Close the figure to free up memory
+
+    print(f"Plot saved as {output_file}")
+
+# Load data from JSON files
+results_dict_img = load_json('results_dict_img.json')
+results_dict_points = load_json('results_dict_points.json')
+
+# Plot the data and save the figure
+plot_and_save_dicts(
+    results_dict_img, results_dict_points, 
+    "Image Results", "Points Results", 
+    "Comparison of Image and Points Results", 
+    "X-axis Label", "Y-axis Label",
+    "comparison_plot.png"  # Output file name
+)
