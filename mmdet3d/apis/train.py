@@ -81,8 +81,8 @@ def train_model(
 
 
     if cfg.get("freeze_sbnet", None):
-        for param in model.encoders.parameters():
-            param.requires_grad = False
+        #for param in model.encoders.parameters():
+        #    param.requires_grad = False
         
         state_dict_path = "pretrained/bevfusion-seg.pth"
         if len(list(model.encoders.camera.vtransform.downsample.children())) == 9:

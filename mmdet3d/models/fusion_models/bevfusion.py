@@ -267,7 +267,8 @@ class BEVFusion(Base3DFusionModel):
         if self.use_sbnet and self.training:
             pass
         else:
-            img, points = self.determine_zero_tensors(img, points, metas)
+            pass
+            #img, points = self.determine_zero_tensors(img, points, metas)
 
 
         args = {

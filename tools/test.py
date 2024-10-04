@@ -14,7 +14,7 @@ from mmcv import Config, DictAction
 from mmcv.cnn import fuse_conv_bn
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import get_dist_info, init_dist, load_checkpoint, wrap_fp16_model
-from mmdet3d.apis import single_gpu_test
+from mmdet3d.apis import single_gpu_test, single_gpu_test_2_models
 from mmdet3d.datasets import build_dataloader, build_dataset
 from mmdet3d.models import build_model
 from mmdet.apis import multi_gpu_test, set_random_seed
@@ -175,6 +175,7 @@ def run_experiment(args):
 
     configs.load(args.config, recursive=True)
     cfg = Config(recursive_eval(configs), filename=args.config)
+
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)
     if cfg.get("cudnn_benchmark", False):
@@ -233,6 +234,8 @@ def run_experiment(args):
         wrap_fp16_model(model)
     if args.use_sbnet:
         model = add_layer_channel_correction(model, state_dict_path=args.checkpoint)
+
+    #import pdb; pdb.set_trace()
     checkpoint = load_checkpoint(model, args.checkpoint, map_location="cpu")
     if args.fuse_conv_bn:
         model = fuse_conv_bn(model)
@@ -242,8 +245,12 @@ def run_experiment(args):
         model.CLASSES = dataset.CLASSES
 
     if not distributed:
-        model = MMDataParallel(model, device_ids=[0])
-        outputs = single_gpu_test(model, data_loader)
+        if True: # test on pretrained single modality models
+            model, model_lidar = get_pretrained_single_modality_models(cfg)
+            outputs = single_gpu_test_2_models(model, model_lidar, data_loader, (args.feature_type, args.zero_tensor_ratio))
+        else:
+            model = MMDataParallel(model, device_ids=[0])
+            outputs = single_gpu_test(model, data_loader)
     else:
         model = MMDistributedDataParallel(
             model.cuda(),
@@ -275,6 +282,17 @@ def run_experiment(args):
             result = dataset.evaluate(outputs, **eval_kwargs)
             return result
 
+def get_pretrained_single_modality_models(cfg):
+
+    model = build_model(cfg.model, test_cfg=cfg.get("test_cfg")) # model is camera
+    model_lidar = build_model(cfg.model_lidar, test_cfg=cfg.get("test_cfg"))
+    wrap_fp16_model(model)
+    wrap_fp16_model(model_lidar)
+    checkpoint = load_checkpoint(model, "pretrained/camera-only-seg.pth", map_location="cpu")
+    checkpoint = load_checkpoint(model_lidar, "pretrained/lidar-only-seg.pth", map_location="cpu")
+    model = MMDataParallel(model, device_ids=[0])
+    model_lidar = MMDataParallel(model_lidar, device_ids=[0])
+    return model, model_lidar
 
 def plot_results(zero_tensor_ratios, results, task, modality, output_file):
     plt.figure(figsize=(10, 6))
@@ -287,40 +305,15 @@ def plot_results(zero_tensor_ratios, results, task, modality, output_file):
     plt.close()
     print(f"Evaluation plot saved to {output_file}")
 
-def main():
-    args = parse_args()
-    dist.init()
-
-    if args.run_experiment:
-        zero_tensor_ratios = [0.0, 0.5, 1.0]
-        results = []
-
-        for ratio in zero_tensor_ratios:
-            args.zero_tensor_ratio = ratio
-            result = run_experiment(args)
-            results.append(result['object/map'])
-        
-        print(results)
-        plt.figure(figsize=(10, 6))
-        plt.plot(zero_tensor_ratios, results, marker='o')
-        plt.xlabel('Zero Tensor Ratio (on scene level)')
-        plt.ylabel('mAP')
-        plt.title(f'What happens when {args.empty_tensor} modality is replaced by zero tensor with different ratios')
-        plt.grid(True)
-        plt.savefig(args.plot_output)
-        print(f"Evaluation plot saved to {args.plot_output}")
-    else:
-        result = run_experiment(args, args.zero_tensor_ratio)
-        print(f"Evaluation result for zero_tensor_ratio {args.zero_tensor_ratio}: {result}")
 
 def main():
     args = parse_args()
     dist.init()
 
     if args.run_experiment:
-        zero_tensor_ratios = [0.0, 0.5, 1.0]
+        zero_tensor_ratios = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
         tasks = {'map':"map/mean/iou@max"}
-        modalities = ['camera','lidar']
+        modalities = ['lidar','camera']
 
         for name, metric in tasks.items():
             for modality in modalities:
@@ -328,13 +321,18 @@ def main():
                 args.feature_type = modality
                 args.eval = [name]
                 results = []
+                results_dict = {}
 
                 for ratio in zero_tensor_ratios:
                     args.zero_tensor_ratio = ratio
                     result = run_experiment(args)
                     print(result)
                     results.append(result[metric])
-                print(f"Results for {name} task, {modality} modality: {results}")
+                    results_dict[ratio] = result[metric]
+                print(results_dict)
+                with open(f'results_dict_{args.empty_tensor}.json', 'w') as f:
+                    json.dump(results_dict, f)
+                print(f"Results for {name} task, when {modality} modality is not present 0-100% of the time: {results}")
                 
                 output_file = f'{args.plot_output}_{name}_{modality}.png'
                 plot_results(zero_tensor_ratios, results, name, modality, output_file)
