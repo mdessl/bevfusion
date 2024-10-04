@@ -103,16 +103,29 @@ def plot_and_save_dicts(dict1, dict2, label1, label2, title, xlabel, ylabel, out
     plt.close()  # Close the figure to free up memory
 
     print(f"Plot saved as {output_file}")
-
+"""
 # Load data from JSON files
-results_dict_img = load_json('results_dict_img.json')
-results_dict_points = load_json('results_dict_points.json')
+results_dict = load_json('results_dict_points.json')
+results_dict_single = load_json('single_results_dict_points.json')
 
 # Plot the data and save the figure
 plot_and_save_dicts(
-    results_dict_img, results_dict_points, 
-    "Image Results", "Points Results", 
-    "Comparison of Image and Points Results", 
-    "X-axis Label", "Y-axis Label",
-    "comparison_plot.png"  # Output file name
+    results_dict, results_dict_single, 
+    "Bevfusion model both modalities", "Bevfusion models single modalities with averaged logits", 
+    "What happens when we remove lidar", 
+    "% of Missing Lidar from Test Set", "mIoU",
+    "lidar.png"  # Output file name
 )
+
+# Load data from JSON files
+results_dict = load_json('results_dict_img.json')
+results_dict_single = load_json('results_dict_points.json')
+
+plot_and_save_dicts(
+    results_dict, results_dict_single, 
+    "Bevfusion model both modalities", "Bevfusion models single modalities with averaged logits", 
+    "What happens when we remove img", 
+    "% of Missing Img from Test Set", "mIoU",
+    "img.png"  # Output file name
+)
+"""

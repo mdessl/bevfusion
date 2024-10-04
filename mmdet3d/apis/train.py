@@ -80,21 +80,20 @@ def train_model(
     ]
 
 
-    if cfg.get("freeze_sbnet", None):
-        #for param in model.encoders.parameters():
-        #    param.requires_grad = False
+    if False:#cfg.get("freeze_sbnet", None):
+        for param in model.encoders.parameters():
+            param.requires_grad = False
         
         state_dict_path = "pretrained/bevfusion-seg.pth"
         if len(list(model.encoders.camera.vtransform.downsample.children())) == 9:
             model = add_layer_channel_correction(model, 256, state_dict_path) # from 80 zo 25
         else:
-            state_dict = torch.load(state_dict_path)
+            state_dict = torch.load(state_dict_path)["state_dict"]
             model.load_state_dict(state_dict, strict=False)
         for param in model.encoders.camera.vtransform.downsample.parameters():
             param.requires_grad = True
 
-    print(sum(p.numel() for p in model.parameters() if p.requires_grad))
-
+    model=torch.load("pretrained/pretrained_sbnet_single_encoders.pt")
     # put model on gpus
     #print("find_unused_parameters was set to False before in apis, train.py")
     find_unused_parameters = cfg.get("find_unused_parameters", True)

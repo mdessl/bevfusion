@@ -40,7 +40,7 @@ class BEVFusion(Base3DFusionModel):
                 self.costum_args = json.load(f)
         else:
             self.costum_args = {}
-
+        
         self.encoders = nn.ModuleDict()
         if encoders.get("camera") is not None:
             self.encoders["camera"] = nn.ModuleDict(
@@ -119,7 +119,7 @@ class BEVFusion(Base3DFusionModel):
                 self.use_sbnet = True
             else:
                 self.use_sbnet = False
-        self.use_sbnet = False
+        self.use_sbnet = True
      
 
     def set_zero_tensor_params(self):
@@ -242,7 +242,21 @@ class BEVFusion(Base3DFusionModel):
                 points = [torch.zeros_like(p) for p in points]
 
         return img, points
+    def create_zero_tensors(self, img, points, metas):
+        """
+        Determine whether to set image or point tensors to zero based on custom args.
+        """
+        if not hasattr(self, "costum_args") or not self.costum_args:
+            return img, points
+        self.custom_args = json.load(open("custom_args.json", "r"))
+        empty_tensor = self.costum_args.get("empty_tensor")
+        if random.random() < self.zero_tensor_ratio:
+            if empty_tensor == "img":
+                img = torch.zeros_like(img)
+            elif empty_tensor == "points":
+                points = [torch.zeros_like(p) for p in points]
 
+        return img, points
     @auto_fp16(apply_to=("img", "points"))
     def forward(
         self,
@@ -267,8 +281,8 @@ class BEVFusion(Base3DFusionModel):
         if self.use_sbnet and self.training:
             pass
         else:
-            pass
-            #img, points = self.determine_zero_tensors(img, points, metas)
+            img, points = self.create_zero_tensors(img, points, metas)
+            #print("setting zero tensors")
 
 
         args = {
@@ -302,6 +316,7 @@ class BEVFusion(Base3DFusionModel):
             output_lidar = self.forward_sbnet(**args, modality="lidar")
             return self.sbnet_forward_inference(output_img, output_lidar, args)
         else:
+            #äimport pdb; pdb.set_trace()
             outputs = self.forward_single(**args)
             return outputs
 
@@ -493,7 +508,7 @@ class BEVFusion(Base3DFusionModel):
                 or sbnet_modality
                 and sensor != sbnet_modality
             ):
-                import pdb; pdb.set_trace()
+                #import pdb; pdb.set_trace()
                 continue
 
             if sensor == "camera":

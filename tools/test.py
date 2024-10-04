@@ -14,7 +14,7 @@ from mmcv import Config, DictAction
 from mmcv.cnn import fuse_conv_bn
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import get_dist_info, init_dist, load_checkpoint, wrap_fp16_model
-from mmdet3d.apis import single_gpu_test, single_gpu_test_2_models
+from mmdet3d.apis import single_gpu_test, single_gpu_test_2_models, single_gpu_test_with_ratio, single_gpu_test_2_models_bbox
 from mmdet3d.datasets import build_dataloader, build_dataset
 from mmdet3d.models import build_model
 from mmdet.apis import multi_gpu_test, set_random_seed
@@ -25,7 +25,7 @@ from tools.utils import get_all_scenes, add_layer_channel_correction
 def parse_args():
     parser = argparse.ArgumentParser(description="MMDet test (and eval) a model")
     parser.add_argument("config", help="test config file path")
-    parser.add_argument("checkpoint", help="checkpoint file")
+    parser.add_argument("checkpoint", default=None, help="checkpoint file")
     parser.add_argument("--out", help="output result file in pickle format")
     parser.add_argument(
         "--fuse-conv-bn",
@@ -132,6 +132,11 @@ def parse_args():
         help='Run the experiment with multiple zero-tensor-ratio values'
     )
     parser.add_argument(
+        '--two-pretrained',
+        action='store_true',
+        help='Run the experiment with multiple zero-tensor-ratio values'
+    )
+    parser.add_argument(
         '--plot-output',
         type=str,
         default='evaluation_plot.png',
@@ -226,28 +231,39 @@ def run_experiment(args):
 
     with open('custom_args.json', 'w') as f:
         json.dump(custom_args, f)
-
+    print(custom_args)
     cfg.model.train_cfg = None
     model = build_model(cfg.model, test_cfg=cfg.get("test_cfg"))
     fp16_cfg = cfg.get("fp16", None)
     if fp16_cfg is not None:
         wrap_fp16_model(model)
-    if args.use_sbnet:
+    if args.use_sbnet and False:
         model = add_layer_channel_correction(model, state_dict_path=args.checkpoint)
-
-    #import pdb; pdb.set_trace()
-    checkpoint = load_checkpoint(model, args.checkpoint, map_location="cpu")
-    if args.fuse_conv_bn:
-        model = fuse_conv_bn(model)
-    if "CLASSES" in checkpoint.get("meta", {}):
-        model.CLASSES = checkpoint["meta"]["CLASSES"]
+    if False:
+        #checkpoint = load_checkpoint(model, args.checkpoint, map_location="cpu")
+        model = torch.load(args.checkpoint)
+        if "CLASSES" in checkpoint.get("meta", {}):
+            model.CLASSES = checkpoint["meta"]["CLASSES"]
+        else:
+            model.CLASSES = dataset.CLASSES
     else:
         model.CLASSES = dataset.CLASSES
+        model = torch.load(args.checkpoint)
+
+    if args.fuse_conv_bn:
+        model = fuse_conv_bn(model)
 
     if not distributed:
-        if True: # test on pretrained single modality models
-            model, model_lidar = get_pretrained_single_modality_models(cfg)
-            outputs = single_gpu_test_2_models(model, model_lidar, data_loader, (args.feature_type, args.zero_tensor_ratio))
+        if False: # test on pretrained single modality models
+            if "bbox" in args.eval:
+                model, model_lidar = get_pretrained_single_modality_models_bbox(cfg)
+                outputs = single_gpu_test_2_models_bbox(model, model_lidar, data_loader, (args.feature_type, args.zero_tensor_ratio))
+            elif "map" in args.eval:
+                model, model_lidar = get_pretrained_single_modality_models_seg(cfg)
+                outputs = single_gpu_test_2_models(model, model_lidar, data_loader, (args.feature_type, args.zero_tensor_ratio))
+        elif False:
+            model = MMDataParallel(model, device_ids=[0])
+            outputs = single_gpu_test_with_ratio(model, data_loader, (args.feature_type, args.zero_tensor_ratio))
         else:
             model = MMDataParallel(model, device_ids=[0])
             outputs = single_gpu_test(model, data_loader)
@@ -282,7 +298,7 @@ def run_experiment(args):
             result = dataset.evaluate(outputs, **eval_kwargs)
             return result
 
-def get_pretrained_single_modality_models(cfg):
+def get_pretrained_single_modality_models_seg(cfg):
 
     model = build_model(cfg.model, test_cfg=cfg.get("test_cfg")) # model is camera
     model_lidar = build_model(cfg.model_lidar, test_cfg=cfg.get("test_cfg"))
@@ -290,6 +306,27 @@ def get_pretrained_single_modality_models(cfg):
     wrap_fp16_model(model_lidar)
     checkpoint = load_checkpoint(model, "pretrained/camera-only-seg.pth", map_location="cpu")
     checkpoint = load_checkpoint(model_lidar, "pretrained/lidar-only-seg.pth", map_location="cpu")
+    model = MMDataParallel(model, device_ids=[0])
+    model_lidar = MMDataParallel(model_lidar, device_ids=[0])
+    return model, model_lidar
+
+def get_pretrained_single_modality_models_bbox(cfg):
+
+    configs.load("configs/nuscenes/det/centerhead/lssfpn/camera/256x704/resnet/default.yaml", recursive=True)
+    cfg_camera = Config(recursive_eval(configs), filename="/root/bevfusion/configs/nuscenes/det/centerhead/lssfpn/camera/256x704/swint/default.yaml")
+    configs.load("configs/nuscenes/det/transfusion/secfpn/lidar/voxelnet.yaml", recursive=True)
+    cfg_lidar = Config(recursive_eval(configs), filename="configs/nuscenes/det/transfusion/secfpn/lidar/voxelnet_0p075.yaml")
+
+    model = build_model(cfg_camera.model, test_cfg=cfg_camera.get("test_cfg")) # model is camera
+    model_lidar = build_model(cfg_lidar.model, test_cfg=cfg_lidar.get("test_cfg"))
+    wrap_fp16_model(model)
+    wrap_fp16_model(model_lidar)
+
+    checkpoint = load_checkpoint(model, "pretrained/camera-only-det.pth", map_location="cpu")
+    checkpoint = load_checkpoint(model_lidar, "pretrained/lidar-only-det.pth", map_location="cpu")
+
+    import pdb; pdb.set_trace()
+
     model = MMDataParallel(model, device_ids=[0])
     model_lidar = MMDataParallel(model_lidar, device_ids=[0])
     return model, model_lidar
@@ -311,7 +348,7 @@ def main():
     dist.init()
 
     if args.run_experiment:
-        zero_tensor_ratios = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
+        zero_tensor_ratios = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0] # 
         tasks = {'map':"map/mean/iou@max"}
         modalities = ['lidar','camera']
 

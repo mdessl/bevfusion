@@ -1,6 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import warnings
-
+from typing import Any
 from mmcv.cnn import build_conv_layer, build_norm_layer
 from mmcv.runner import BaseModule
 from torch import nn as nn
@@ -33,6 +33,7 @@ class SECOND(BaseModule):
         conv_cfg=dict(type="Conv2d", bias=False),
         init_cfg=None,
         pretrained=None,
+        **kwargs: Any
     ):
         super().__init__(init_cfg=init_cfg)
         assert len(layer_strides) == len(layer_nums)
