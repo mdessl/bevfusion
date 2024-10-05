@@ -23,7 +23,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("config", metavar="FILE", help="config file")
-    parser.add_argument("--checkpoint", help="checkpoint file") # pretrained/bevfusion-seg.pth
+    parser.add_argument("checkpoint", help="checkpoint file") # pretrained/bevfusion-seg.pth
     parser.add_argument("--run-dir", metavar="DIR", help="run directory")
     args, opts = parser.parse_known_args()
 

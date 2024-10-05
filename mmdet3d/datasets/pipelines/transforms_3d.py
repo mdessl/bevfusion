@@ -1091,3 +1091,33 @@ class ImageDistort:
             new_imgs.append(img)
         data["img"] = new_imgs
         return data
+
+@PIPELINES.register_module()
+class AddMissingModality:
+
+    def __init__(
+        self,
+        zero_ratio,
+        zero_modality
+    ):
+        self.zero_ratio = zero_ratio
+        self.zero_modality = zero_modality
+
+    def __call__(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        if self.zero_modality == "camera":
+            imgs = data["img"]
+            new_imgs = []
+            for img in imgs:
+                if random.random() > self.zero_ratio:
+                    img = torch.zeros_like(img)
+                new_imgs.append(img)
+            data["img"] = new_imgs
+        elif self.zero_modality == "lidar":
+            points = data["points"]
+            print(points)
+            print(dir(points))
+            print(type(points))
+            if random.random() > self.zero_ratio:
+                points.tensor = torch.zeros_like(points.tensor)
+            data["points"] = points
+        return data

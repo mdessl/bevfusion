@@ -201,6 +201,10 @@ def run_experiment(args):
         if samples_per_gpu > 1:
             for ds_cfg in cfg.data.test:
                 ds_cfg.pipeline = replace_ImageToTensor(ds_cfg.pipeline)
+    
+    #if args.feature_type is not None and args.zero_tensor_ratio:
+    #    cfg.data.test.pipeline.insert(9,dict(type='AddMissingModality', zero_ratio=args.zero_tensor_ratio, zero_modality=args.feature_type))
+    
     samples_per_gpu = 1
     #import pdb; pdb.set_trace()
     distributed = False
@@ -208,7 +212,6 @@ def run_experiment(args):
     if args.seed is not None:
         set_random_seed(args.seed, deterministic=args.deterministic)
 
-    
     dataset = build_dataset(cfg.data.test)
     data_loader = build_dataloader(
         dataset,
@@ -232,6 +235,8 @@ def run_experiment(args):
     with open('custom_args.json', 'w') as f:
         json.dump(custom_args, f)
     print(custom_args)
+
+
     cfg.model.train_cfg = None
     model = build_model(cfg.model, test_cfg=cfg.get("test_cfg"))
     fp16_cfg = cfg.get("fp16", None)
@@ -248,16 +253,17 @@ def run_experiment(args):
             model.CLASSES = dataset.CLASSES
     else:
         model.CLASSES = dataset.CLASSES
-        model = torch.load(args.checkpoint)
+        #model = torch.load(args.checkpoint)
 
     if args.fuse_conv_bn:
         model = fuse_conv_bn(model)
 
     if not distributed:
-        if False: # test on pretrained single modality models
+        if True: # test on pretrained single modality models
             if "bbox" in args.eval:
-                model, model_lidar = get_pretrained_single_modality_models_bbox(cfg)
-                outputs = single_gpu_test_2_models_bbox(model, model_lidar, data_loader, (args.feature_type, args.zero_tensor_ratio))
+                #model, model_lidar = get_pretrained_single_modality_models_bbox(cfg)
+                model = MMDataParallel(model, device_ids=[0])
+                outputs = single_gpu_test_2_models_bbox(model, model, data_loader, (args.feature_type, args.zero_tensor_ratio))
             elif "map" in args.eval:
                 model, model_lidar = get_pretrained_single_modality_models_seg(cfg)
                 outputs = single_gpu_test_2_models(model, model_lidar, data_loader, (args.feature_type, args.zero_tensor_ratio))
@@ -306,6 +312,28 @@ def get_pretrained_single_modality_models_seg(cfg):
     wrap_fp16_model(model_lidar)
     checkpoint = load_checkpoint(model, "pretrained/camera-only-seg.pth", map_location="cpu")
     checkpoint = load_checkpoint(model_lidar, "pretrained/lidar-only-seg.pth", map_location="cpu")
+    model = MMDataParallel(model, device_ids=[0])
+    model_lidar = MMDataParallel(model_lidar, device_ids=[0])
+    return model, model_lidar
+
+
+def get_pretrained_single_modality_models_bbox(cfg): # the point here is the use the exact same model twice 
+
+    configs.load("configs/nuscenes/det/centerhead/lssfpn/camera/256x704/resnet/default.yaml", recursive=True)
+    cfg_camera = Config(recursive_eval(configs), filename="/root/bevfusion/configs/nuscenes/det/centerhead/lssfpn/camera/256x704/swint/default.yaml")
+    configs.load("configs/nuscenes/det/transfusion/secfpn/lidar/voxelnet.yaml", recursive=True)
+    cfg_lidar = Config(recursive_eval(configs), filename="configs/nuscenes/det/transfusion/secfpn/lidar/voxelnet_0p075.yaml")
+
+    model = build_model(cfg_camera.model, test_cfg=cfg_camera.get("test_cfg")) # model is camera
+    model_lidar = build_model(cfg_lidar.model, test_cfg=cfg_lidar.get("test_cfg"))
+    wrap_fp16_model(model)
+    wrap_fp16_model(model_lidar)
+
+    checkpoint = load_checkpoint(model, "pretrained/camera-only-det.pth", map_location="cpu")
+    checkpoint = load_checkpoint(model_lidar, "pretrained/lidar-only-det.pth", map_location="cpu")
+
+    import pdb; pdb.set_trace()
+
     model = MMDataParallel(model, device_ids=[0])
     model_lidar = MMDataParallel(model_lidar, device_ids=[0])
     return model, model_lidar

@@ -40,16 +40,17 @@ def add_layer_channel_correction(model, output_channels=256, state_dict_path="pr
     
     model.encoders.camera.vtransform.downsample = new_downsample
     
-    # Load the state dict if a path is provided
-    if state_dict_path:
-        state_dict = torch.load(state_dict_path)
-        model.load_state_dict(state_dict, strict=False)
-    
-    # Initialize the new conv layer if it's not in the loaded state dict
-    if 'encoders.camera.vtransform.downsample.9.weight' not in model.state_dict():
-        model_state_dict = model.state_dict()
-        model_state_dict['encoders.camera.vtransform.downsample.9.weight'] = new_conv.weight
-        model.load_state_dict(model_state_dict)
+    if False:
+        # Load the state dict if a path is provided
+        if state_dict_path:
+            state_dict = torch.load(state_dict_path)
+            model.load_state_dict(state_dict, strict=False)
+        
+        # Initialize the new conv layer if it's not in the loaded state dict
+        if 'encoders.camera.vtransform.downsample.9.weight' not in model.state_dict():
+            model_state_dict = model.state_dict()
+            model_state_dict['encoders.camera.vtransform.downsample.9.weight'] = new_conv.weight
+            model.load_state_dict(model_state_dict)
     
     return model
 
@@ -66,7 +67,7 @@ def train_model(
 
     # prepare data loaders
     dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
-
+    #import pdb; pdb.set_trace()
     data_loaders = [
         build_dataloader(
             ds,
@@ -79,22 +80,24 @@ def train_model(
         for ds in dataset
     ]
 
+    #model=torch.load("pretrained/pretrained_sbnet_single_encoders.pt")
+    state_dict = torch.load("pretrained/bevfusion-seg.pth")["state_dict"]
+    model.load_state_dict(state_dict)
+    model = add_layer_channel_correction(model, 256, state_dict_path=None)
 
     if False:#cfg.get("freeze_sbnet", None):
-        for param in model.encoders.parameters():
-            param.requires_grad = False
+        #for param in model.encoders.parameters():
+        #    param.requires_grad = False
         
         state_dict_path = "pretrained/bevfusion-seg.pth"
         if len(list(model.encoders.camera.vtransform.downsample.children())) == 9:
+            print("adding layer")
             model = add_layer_channel_correction(model, 256, state_dict_path) # from 80 zo 25
         else:
             state_dict = torch.load(state_dict_path)["state_dict"]
             model.load_state_dict(state_dict, strict=False)
         for param in model.encoders.camera.vtransform.downsample.parameters():
             param.requires_grad = True
-
-    model=torch.load("pretrained/pretrained_sbnet_single_encoders.pt")
-    # put model on gpus
     #print("find_unused_parameters was set to False before in apis, train.py")
     find_unused_parameters = cfg.get("find_unused_parameters", True)
     # Sets the `find_unused_parameters` parameter in
