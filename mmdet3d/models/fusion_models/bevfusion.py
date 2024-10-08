@@ -312,9 +312,8 @@ class BEVFusion(Base3DFusionModel):
         #self.use_sbnet = True
         if True:  # inference with sbnet
             modality = args["metas"][0]['sbnet_modality']
-            print(modality)
             return self.forward_sbnet(**args, modality=modality) # camera or lidar
-        elif self.use_sbnet and not self.training:  # inference with sbnet
+        elif False:#self.use_sbnet and not self.training:  # inference with sbnet
             output_img = self.forward_sbnet(**args, modality="camera")
             output_lidar = self.forward_sbnet(**args, modality="lidar")
             return self.sbnet_forward_inference(output_img, output_lidar, args)
@@ -498,7 +497,7 @@ class BEVFusion(Base3DFusionModel):
     ):
         features = []
         auxiliary_losses = {}
-        feature_type = None #getattr(self, "feature_type", None)
+        feature_type = getattr(self, "feature_type", None)
         sbnet_modality = getattr(self, "sbnet_modality", None)
 
         for sensor in (
@@ -508,8 +507,6 @@ class BEVFusion(Base3DFusionModel):
             if (
                 feature_type
                 and sensor != feature_type
-                or sbnet_modality
-                and sensor != sbnet_modality
             ):
                 #import pdb; pdb.set_trace()
                 continue
@@ -533,8 +530,6 @@ class BEVFusion(Base3DFusionModel):
                 if self.use_depth_loss:
                     feature, auxiliary_losses["depth"] = feature[0], feature[-1]
             elif sensor == "lidar":
-                print(points)
-                print(sensor)
                 feature = self.extract_features(points, sensor)
             elif sensor == "radar":
                 feature = self.extract_features(radar, sensor)
@@ -551,6 +546,7 @@ class BEVFusion(Base3DFusionModel):
         if len(features) == 1 or sbnet_modality:
             assert len(features) == 1, features
             x = features[0]
+            print("wrong")
         elif self.fuser:
             x = self.fuser(features)
         else:

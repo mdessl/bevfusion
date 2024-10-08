@@ -1,6 +1,8 @@
 import torch
 from mmcv.parallel import MMDistributedDataParallel
 from mmcv.runner import (
+    HOOKS,
+    Hook,
     DistSamplerSeedHook,
     EpochBasedRunner,
     GradientCumulativeFp16OptimizerHook,
@@ -17,6 +19,18 @@ from mmdet.datasets import build_dataloader, build_dataset, replace_ImageToTenso
 
 
 import torch.nn as nn
+
+
+@HOOKS.register_module()
+class GradientAccumulationCheckHook(Hook):
+
+    def after_train_iter(self, runner):
+        if (runner.iter + 1) % runner.optimizer.grad_accum == 0:
+            print(f"Optimizer step at iteration {runner.iter + 1}")
+            # Add your gradient checking/printing logic here if needed
+            for name, param in runner.model.module.named_parameters():  # Access model parameters through runner.model.module
+                if param.grad is not None:
+                    print(f"Gradient norm of {name}: {param.grad.norm()}")
 
 def add_layer_channel_correction(model, output_channels=256, state_dict_path="pretrained/bevfusion-seg.pth"):
     # Get the current layers of the downsample module
@@ -81,15 +95,27 @@ def train_model(
     ]
 
     #model=torch.load("pretrained/pretrained_sbnet_single_encoders.pt")
-    state_dict = torch.load("pretrained/bevfusion-seg.pth")["state_dict"]
-    model.load_state_dict(state_dict)
-    model = add_layer_channel_correction(model, 256, state_dict_path=None)
+    #state_dict = torch.load("pretrained/bevfusion-seg.pth")["state_dict"]
+    if False:
+        model = add_layer_channel_correction(model, 256, state_dict_path=None)
+        state_dict = torch.load("runs/run-e2518079-cd55ce4a/epoch_1.pth")["state_dict"]
+        model.load_state_dict(state_dict)
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f"Total parameters: {total_params}")
+        print(f"Trainable parameters: {trainable_params}")
+        
+    if False:
+        for param in model.encoders.parameters():
+            param.requires_grad = False
+        for param in model.encoders.camera.vtransform.downsample.parameters():
+            param.requires_grad = True
 
     if False:#cfg.get("freeze_sbnet", None):
         #for param in model.encoders.parameters():
         #    param.requires_grad = False
         
-        state_dict_path = "pretrained/bevfusion-seg.pth"
+        state_dict_path = "runs/run-e2518079-77129fcd/epoch_1.pth"
         if len(list(model.encoders.camera.vtransform.downsample.children())) == 9:
             print("adding layer")
             model = add_layer_channel_correction(model, 256, state_dict_path) # from 80 zo 25
@@ -145,6 +171,8 @@ def train_model(
     else:
         optimizer_config = cfg.optimizer_config
 
+    #custom_hooks = [dict(type='GradientAccumulationCheckHook')]
+
     # register hooks
     runner.register_training_hooks(
         cfg.lr_config,
@@ -153,6 +181,7 @@ def train_model(
         cfg.log_config,
         cfg.get("momentum_config", None),
     )
+    #custom_hooks_config=dict(custom_hooks=custom_hooks)
     if isinstance(runner, EpochBasedRunner):
         runner.register_hook(DistSamplerSeedHook())
 

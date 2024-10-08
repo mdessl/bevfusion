@@ -66,14 +66,14 @@ class Custom3DDataset(Dataset):
         self.CLASSES = self.get_classes(classes)
         self.cat2id = {name: i for i, name in enumerate(self.CLASSES)}
         self.data_infos = self.load_annotations(self.ann_file) 
-        num_samples = int(len(self.data_infos) / 4)
-        self.data_infos = random.sample(self.data_infos, num_samples)
+        #num_samples = int(len(self.data_infos) / 2)
+        #self.data_infos = random.sample(self.data_infos, num_samples)
         
         if not self.test_mode:
 
             #import pdb; pdb.set_trace()
             self.lidar = self.load_annotations(self.ann_file)
-            self.lidar = random.sample(self.lidar, num_samples)
+            #self.lidar = random.sample(self.lidar, num_samples)
             print("No testmode: Setting sbnet modality")
             for info in self.lidar:
                 info['sbnet_modality'] = "lidar"
