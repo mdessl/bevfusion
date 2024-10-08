@@ -310,9 +310,12 @@ class BEVFusion(Base3DFusionModel):
             raise NotImplementedError
         
         #self.use_sbnet = True
-        if True:  # inference with sbnet
+        if False:  # inference with sbnet
             modality = args["metas"][0]['sbnet_modality']
             return self.forward_sbnet(**args, modality=modality) # camera or lidar
+        elif True:
+            modality = args["metas"][0]['sbnet_modality']
+            return self.forward_single_with_logits(**args, modality="lidar")
         elif False:#self.use_sbnet and not self.training:  # inference with sbnet
             output_img = self.forward_sbnet(**args, modality="camera")
             output_lidar = self.forward_sbnet(**args, modality="lidar")
@@ -424,6 +427,7 @@ class BEVFusion(Base3DFusionModel):
                 else:
                     raise ValueError(f"unsupported head: {type}")
             return outputs
+
     def sbnet_forward_inference(self, output_img, output_lidar, args):
         batch_size = len(output_img)
         combined_outputs = [{} for _ in range(batch_size)]
@@ -604,6 +608,114 @@ class BEVFusion(Base3DFusionModel):
                     raise ValueError(f"unsupported head: {type}")
             return outputs
 
+    @auto_fp16(apply_to=("img", "points"))    
+    def forward_single_with_logits(
+            self,
+            img,
+            points,
+            camera2ego,
+            lidar2ego,
+            lidar2camera,
+            lidar2image,
+            camera_intrinsics,
+            camera2lidar,
+            img_aug_matrix,
+            lidar_aug_matrix,
+            metas,
+            depths=None,
+            radar=None,
+            gt_masks_bev=None,
+            gt_bboxes_3d=None,
+            gt_labels_3d=None,
+            modality="camera",  # New parameter to specify the modality
+            **kwargs,
+        ):
+            features = []
+            auxiliary_losses = {}
+
+            if modality == "camera":
+                feature = self.extract_camera_features(
+                    img,
+                    points,
+                    radar,
+                    camera2ego,
+                    lidar2ego,
+                    lidar2camera,
+                    lidar2image,
+                    camera_intrinsics,
+                    camera2lidar,
+                    img_aug_matrix,
+                    lidar_aug_matrix,
+                    metas,
+                    gt_depths=depths,
+                )
+                if self.use_depth_loss:
+                    feature, auxiliary_losses["depth"] = feature[0], feature[-1]
+            elif modality == "lidar":
+                feature = self.extract_features(points, modality)
+            elif modality == "radar":
+                feature = self.extract_features(radar, modality)
+            else:
+                raise ValueError(f"unsupported modality: {modality}")
+
+            x = feature
+            batch_size = x.shape[0]
+
+            x = self.decoder["backbone"](x)
+            x = self.decoder["neck"](x)
+
+            if self.training:
+                outputs = {}
+                for type, head in self.heads.items():
+                    if type == "object":
+                        pred_dict = head(x, metas)
+                        losses = head.loss(gt_bboxes_3d, gt_labels_3d, pred_dict)
+                    elif type == "map":
+                        losses = head(x, gt_masks_bev)
+                    else:
+                        raise ValueError(f"unsupported head: {type}")
+                    for name, val in losses.items():
+                        if val.requires_grad:
+                            outputs[f"loss/{type}/{name}"] = val * self.loss_scale[type]
+                        else:
+                            outputs[f"stats/{type}/{name}"] = val
+                if self.use_depth_loss and modality == "camera":
+                    if "depth" in auxiliary_losses:
+                        outputs["loss/depth"] = auxiliary_losses["depth"]
+                    else:
+                        raise ValueError("Use depth loss is true, but depth loss not found")
+                return outputs
+            else:
+                outputs = [{} for _ in range(batch_size)]
+                for type, head in self.heads.items():
+                    if type == "object":
+                        pred_dict = head(x, metas)
+                        bboxes = head.get_bboxes(pred_dict, metas)
+                        for k, (boxes, scores, labels) in enumerate(bboxes):
+                            outputs[k].update(
+                                {
+                                    "boxes_3d": boxes.to("cpu"),
+                                    "scores_3d": scores.cpu(),
+                                    "labels_3d": labels.cpu(),
+                                    "x": x,
+                                    "metas": metas,
+                                    "head": head,
+                                    "pred_dict": pred_dict
+                                }
+                            )
+                    elif type == "map":
+                        logits = head(x)
+                        for k in range(batch_size):
+                            outputs[k].update(
+                                {
+                                    "masks_bev": logits[k].cpu(),
+                                    "gt_masks_bev": gt_masks_bev[k].cpu(),
+                                }
+                            )
+                    else:
+                        raise ValueError(f"unsupported head: {type}")
+                return outputs
+    res_lidar[0]["x"].keys()
 
 @FUSIONMODELS.register_module()
 class SBNet(Base3DFusionModel):

@@ -338,26 +338,6 @@ def get_pretrained_single_modality_models_bbox(cfg): # the point here is the use
     model_lidar = MMDataParallel(model_lidar, device_ids=[0])
     return model, model_lidar
 
-def get_pretrained_single_modality_models_bbox(cfg):
-
-    configs.load("configs/nuscenes/det/centerhead/lssfpn/camera/256x704/resnet/default.yaml", recursive=True)
-    cfg_camera = Config(recursive_eval(configs), filename="/root/bevfusion/configs/nuscenes/det/centerhead/lssfpn/camera/256x704/swint/default.yaml")
-    configs.load("configs/nuscenes/det/transfusion/secfpn/lidar/voxelnet.yaml", recursive=True)
-    cfg_lidar = Config(recursive_eval(configs), filename="configs/nuscenes/det/transfusion/secfpn/lidar/voxelnet_0p075.yaml")
-
-    model = build_model(cfg_camera.model, test_cfg=cfg_camera.get("test_cfg")) # model is camera
-    model_lidar = build_model(cfg_lidar.model, test_cfg=cfg_lidar.get("test_cfg"))
-    wrap_fp16_model(model)
-    wrap_fp16_model(model_lidar)
-
-    checkpoint = load_checkpoint(model, "pretrained/camera-only-det.pth", map_location="cpu")
-    checkpoint = load_checkpoint(model_lidar, "pretrained/lidar-only-det.pth", map_location="cpu")
-
-    import pdb; pdb.set_trace()
-
-    model = MMDataParallel(model, device_ids=[0])
-    model_lidar = MMDataParallel(model_lidar, device_ids=[0])
-    return model, model_lidar
 
 def plot_results(zero_tensor_ratios, results, task, modality, output_file):
     plt.figure(figsize=(10, 6))
