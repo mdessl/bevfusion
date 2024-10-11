@@ -315,7 +315,13 @@ class BEVFusion(Base3DFusionModel):
             return self.forward_sbnet(**args, modality=modality) # camera or lidar
         elif True:
             modality = args["metas"][0]['sbnet_modality']
-            return self.forward_single_with_logits(**args, modality="lidar")
+            img_temp = args["img"].clone()
+            args["img"] = torch.zeros_like(img)
+            lid = self.forward_single_with_logits(**args)
+            args["img"] = img_temp
+            args["points"] = [torch.zeros_like(p) for p in args["points"]]
+            cam = self.forward_single_with_logits(**args)
+            import pdb; pdb.set_trace()
         elif False:#self.use_sbnet and not self.training:  # inference with sbnet
             output_img = self.forward_sbnet(**args, modality="camera")
             output_lidar = self.forward_sbnet(**args, modality="lidar")
@@ -507,13 +513,6 @@ class BEVFusion(Base3DFusionModel):
         for sensor in (
             self.encoders if self.training else list(self.encoders.keys())[::-1]
         ):
-            # Skip processing if it's not the specified feature type
-            if (
-                feature_type
-                and sensor != feature_type
-            ):
-                #import pdb; pdb.set_trace()
-                continue
 
             if sensor == "camera":
                 feature = self.extract_camera_features(
@@ -546,6 +545,7 @@ class BEVFusion(Base3DFusionModel):
             # avoid OOM
             features = features[::-1]
 
+        print(features)
         # Remove fusion step if only one feature type is used
         if len(features) == 1 or sbnet_modality:
             assert len(features) == 1, features
@@ -632,38 +632,64 @@ class BEVFusion(Base3DFusionModel):
         ):
             features = []
             auxiliary_losses = {}
+            feature_type = getattr(self, "feature_type", None)
+            sbnet_modality = getattr(self, "sbnet_modality", None)
 
-            if modality == "camera":
-                feature = self.extract_camera_features(
-                    img,
-                    points,
-                    radar,
-                    camera2ego,
-                    lidar2ego,
-                    lidar2camera,
-                    lidar2image,
-                    camera_intrinsics,
-                    camera2lidar,
-                    img_aug_matrix,
-                    lidar_aug_matrix,
-                    metas,
-                    gt_depths=depths,
-                )
-                if self.use_depth_loss:
-                    feature, auxiliary_losses["depth"] = feature[0], feature[-1]
-            elif modality == "lidar":
-                feature = self.extract_features(points, modality)
-            elif modality == "radar":
-                feature = self.extract_features(radar, modality)
+            for sensor in (
+                self.encoders if self.training else list(self.encoders.keys())[::-1]
+            ):
+                # Skip processing if it's not the specified feature type
+                if (
+                    feature_type
+                    and sensor != feature_type
+                ):
+                    #import pdb; pdb.set_trace()
+                    continue
+
+                if sensor == "camera":
+                    feature = self.extract_camera_features(
+                        img,
+                        points,
+                        radar,
+                        camera2ego,
+                        lidar2ego,
+                        lidar2camera,
+                        lidar2image,
+                        camera_intrinsics,
+                        camera2lidar,
+                        img_aug_matrix,
+                        lidar_aug_matrix,
+                        metas,
+                        gt_depths=depths,
+                    )
+                    if self.use_depth_loss:
+                        feature, auxiliary_losses["depth"] = feature[0], feature[-1]
+                elif sensor == "lidar":
+                    feature = self.extract_features(points, sensor)
+                elif sensor == "radar":
+                    feature = self.extract_features(radar, sensor)
+                else:
+                    raise ValueError(f"unsupported sensor: {sensor}")
+
+                features.append(feature)
+
+            if not self.training:
+                # avoid OOM
+                features = features[::-1]
+
+            # Remove fusion step if only one feature type is used
+            if len(features) == 1 or sbnet_modality:
+                assert len(features) == 1, features
+                x = features[0]
+                print("wrong")
+            elif self.fuser:
+                x = self.fuser(features)
             else:
-                raise ValueError(f"unsupported modality: {modality}")
-
-            x = feature
+                raise ("error")
             batch_size = x.shape[0]
 
             x = self.decoder["backbone"](x)
             x = self.decoder["neck"](x)
-
             if self.training:
                 outputs = {}
                 for type, head in self.heads.items():
@@ -715,7 +741,6 @@ class BEVFusion(Base3DFusionModel):
                     else:
                         raise ValueError(f"unsupported head: {type}")
                 return outputs
-    res_lidar[0]["x"].keys()
 
 @FUSIONMODELS.register_module()
 class SBNet(Base3DFusionModel):

@@ -244,9 +244,9 @@ def run_experiment(args):
         wrap_fp16_model(model)
     if args.use_sbnet and False:
         model = add_layer_channel_correction(model, state_dict_path=args.checkpoint)
-    if False:
-        #checkpoint = load_checkpoint(model, args.checkpoint, map_location="cpu")
-        model = torch.load(args.checkpoint)
+    if True:
+        checkpoint = load_checkpoint(model, args.checkpoint, map_location="cpu")
+        #model = torch.load(args.checkpoint)
         if "CLASSES" in checkpoint.get("meta", {}):
             model.CLASSES = checkpoint["meta"]["CLASSES"]
         else:
@@ -356,7 +356,7 @@ def main():
     dist.init()
 
     if args.run_experiment:
-        zero_tensor_ratios = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0] # 
+        zero_tensor_ratios = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0] # 
         tasks = {'map':"map/mean/iou@max"}
         modalities = ['lidar','camera']
 
@@ -371,10 +371,8 @@ def main():
                 for ratio in zero_tensor_ratios:
                     args.zero_tensor_ratio = ratio
                     result = run_experiment(args)
-                    print(result)
                     results.append(result[metric])
                     results_dict[ratio] = result[metric]
-                print(results_dict)
                 with open(f'results_dict_{args.empty_tensor}.json', 'w') as f:
                     json.dump(results_dict, f)
                 print(f"Results for {name} task, when {modality} modality is not present 0-100% of the time: {results}")
