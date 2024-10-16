@@ -141,9 +141,8 @@ def single_gpu_test_2_models_bbox(model_lidar, model_camera, data_loader, zero_t
             
 
             if True:
-                res_lidar = model_lidar(return_loss=False, rescale=True, **data, model_cam=model_camera)
+                result = model_lidar(return_loss=False, rescale=True, **data, model_cam=model_camera)
                 #res_cam = model_camera(return_loss=False, rescale=True, **data)
-                import pdb;pdb.set_trace()
 
 
 
@@ -177,7 +176,7 @@ def single_gpu_test_2_models_bbox(model_lidar, model_camera, data_loader, zero_t
                 res_cam = model_camera(return_loss=False, rescale=True, **data)
                 result_tens = (res_lidar[0]['masks_bev'] + res_cam[0]['masks_bev']) / 2
 
-            result = [{'masks_bev': result_tens, "gt_masks_bev":res_lidar[0]['gt_masks_bev']}]
+            #result = [{'masks_bev': result_tens, "gt_masks_bev":res_lidar[0]['gt_masks_bev']}]
 
         assert len(result) == 1 
         results.extend(result)

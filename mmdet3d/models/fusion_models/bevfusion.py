@@ -253,11 +253,11 @@ class BEVFusion(Base3DFusionModel):
             modality = args["metas"][0]["sbnet_modality"]
             return self.forward_sbnet(**args, modality=modality)  # camera or lidar
         elif True:
-            if getattr(args, "model_cam", None):
+            if args.get("run_model_cam", None):
                 return self.forward_single_with_logits(**args)
 
             lidar = self.forward_single_with_logits(**args)
-            cam = kwargs["model_cam"](**args, model_cam=True)
+            cam = kwargs["model_cam"](**args, run_model_cam=True)
 
             outputs = {}
             cam_logits = cam[0]["x"]
@@ -273,7 +273,6 @@ class BEVFusion(Base3DFusionModel):
                         "labels_3d": labels.cpu(),
                     }
                 )   
-            import pdb; pdb.set_trace()
             return outputs 
 
         elif False:
