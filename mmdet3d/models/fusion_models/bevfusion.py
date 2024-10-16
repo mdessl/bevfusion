@@ -253,11 +253,28 @@ class BEVFusion(Base3DFusionModel):
             modality = args["metas"][0]["sbnet_modality"]
             return self.forward_sbnet(**args, modality=modality)  # camera or lidar
         elif True:
+            if getattr(args, "model_cam", None):
+                return self.forward_single_with_logits(**args)
+
             lidar = self.forward_single_with_logits(**args)
-            cam = kwargs["model_cam"](**args)
-            
+            cam = kwargs["model_cam"](**args, model_cam=True)
+
+            outputs = {}
+            cam_logits = cam[0]["x"]
+            lidar_logits, metas, head = lidar[0]["x"], lidar[0]["metas"], lidar[0]["head"]
+            x = (cam_logits + lidar_logits)
+            pred_dict = head(x, metas)
+            bboxes = head.get_bboxes(pred_dict, metas)
+            for k, (boxes, scores, labels) in enumerate(bboxes):
+                outputs[k] = (
+                    {
+                        "boxes_3d": boxes.to("cpu"),
+                        "scores_3d": scores.cpu(),
+                        "labels_3d": labels.cpu(),
+                    }
+                )   
             import pdb; pdb.set_trace()
-            #return 
+            return outputs 
 
         elif False:
             modality = args["metas"][0]["sbnet_modality"]
