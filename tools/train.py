@@ -15,7 +15,7 @@ from mmcv.runner import load_checkpoint
 from mmdet3d.apis import train_model
 from mmdet3d.datasets import build_dataset, nuscenes_dataset
 from mmdet3d.models import build_model
-from mmdet3d.utils import get_root_logger, convert_sync_batchnorm, recursive_eval
+from mmdet3d.utils import get_root_logger, convert_sync_batchnorm, recursive_eval, convert_ghost_batchnorm
 
 import torch.nn as nn
 import torch
@@ -135,6 +135,7 @@ def main():
             cfg["sync_bn"] = dict(exclude=[])
         model = convert_sync_batchnorm(model, exclude=cfg["sync_bn"]["exclude"])
 
+    model = convert_ghost_batchnorm(model, num_splits=16)
     logger.info(f"Model:\n{model}")
     train_model(
         model,
