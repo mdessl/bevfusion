@@ -1,4 +1,5 @@
 import copy
+from typing import Any
 
 import numpy as np
 import torch
@@ -67,6 +68,7 @@ class TransFusionHead(nn.Module):
         train_cfg=None,
         test_cfg=None,
         bbox_coder=None,
+        **kwargs: Any
     ):
         super(TransFusionHead, self).__init__()
 

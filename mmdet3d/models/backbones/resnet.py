@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 
 import torch
 from mmcv.cnn.resnet import BasicBlock, make_res_layer
@@ -15,6 +15,7 @@ class GeneralizedResNet(nn.ModuleList):
         self,
         in_channels: int,
         blocks: List[Tuple[int, int, int]],
+        **kwargs: Any
     ) -> None:
         super().__init__()
         self.in_channels = in_channels

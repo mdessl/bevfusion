@@ -1,5 +1,6 @@
 model:
   encoders:
+    lidar: null
     camera:
       backbone:
         type: SwinTransformer
@@ -46,6 +47,25 @@ model:
         zbound: [-10.0, 10.0, 20.0]
         dbound: [1.0, 60.0, 0.5]
         downsample: 2
+  fuser: null
+  decoder:
+    backbone:
+      type: GeneralizedResNet
+      in_channels: 80
+      blocks:
+        - [2, 160, 2]
+        - [2, 320, 2]
+        - [2, 640, 1]
+    neck:
+      type: LSSFPN
+      in_indices: [-1, 0]
+      in_channels: [640, 160]
+      out_channels: 256
+      scale_factor: 2
+
+model_lidar:
+  encoders:
+    camera: null
     lidar:
       voxelize:
         max_num_points: 10
@@ -72,10 +92,7 @@ model:
           - [0, 0, [1, 1, 0]]
           - [0, 0]
         block_type: basicblock
-  fuser:
-    type: ConvFuser
-    in_channels: [80, 256]
-    out_channels: 256
+  fuser: null
   decoder:
     backbone:
       type: SECOND
@@ -107,6 +124,7 @@ model:
     map:
       in_channels: 512
 
+
 optimizer:
   type: AdamW
   lr: 1.0e-4
@@ -128,6 +146,3 @@ lr_config:
 
 momentum_config:
   policy: cyclic
-
-load_from: pretrained/bevfusion-seg.pth
-freeze_sbnet: true

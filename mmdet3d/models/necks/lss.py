@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Any
 
 import torch
 from torch import nn
@@ -17,6 +17,7 @@ class LSSFPN(nn.Module):
         in_channels: Tuple[int, int],
         out_channels: int,
         scale_factor: int = 1,
+        **kwargs: Any
     ) -> None:
         super().__init__()
         self.in_indices = in_indices

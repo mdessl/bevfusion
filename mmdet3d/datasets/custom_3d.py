@@ -4,6 +4,7 @@ from os import path as osp
 import mmcv
 import numpy as np
 from torch.utils.data import Dataset
+import random
 
 from mmdet.datasets import DATASETS
 
@@ -52,6 +53,7 @@ class Custom3DDataset(Dataset):
         box_type_3d="LiDAR",
         filter_empty_gt=True,
         test_mode=False,
+        **kwargs
     ):
         super().__init__()
         self.dataset_root = dataset_root
@@ -64,16 +66,23 @@ class Custom3DDataset(Dataset):
         self.CLASSES = self.get_classes(classes)
         self.cat2id = {name: i for i, name in enumerate(self.CLASSES)}
         self.data_infos = self.load_annotations(self.ann_file) 
-        self.lidar = self.load_annotations(self.ann_file)
-
-        for info in self.lidar:
-            info['sbnet_modality'] = "lidar"
+        #num_samples = int(len(self.data_infos) / 2)
+        #self.data_infos = random.sample(self.data_infos, num_samples)
         
-        for info in self.data_infos:
-            info['sbnet_modality'] = "camera"
+        if not self.test_mode:
+
+            #import pdb; pdb.set_trace()
+            self.lidar = self.load_annotations(self.ann_file)
+            #self.lidar = random.sample(self.lidar, num_samples)
+            print("No testmode: Setting sbnet modality")
+            for info in self.lidar:
+                info['sbnet_modality'] = "lidar"
+        
+            for info in self.data_infos:
+                info['sbnet_modality'] = "camera"
+            self.data_infos.extend(self.lidar)
 
 
-        self.data_infos.extend(self.lidar)
         if pipeline is not None:
             self.pipeline = Compose(pipeline)
 

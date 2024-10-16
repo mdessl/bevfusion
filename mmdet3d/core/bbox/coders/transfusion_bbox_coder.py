@@ -1,3 +1,5 @@
+from typing import Any
+
 import torch
 
 from mmdet.core.bbox import BaseBBoxCoder
@@ -13,7 +15,7 @@ class TransFusionBBoxCoder(BaseBBoxCoder):
                  post_center_range=None,
                  score_threshold=None,
                  code_size=8,
-                 ):
+                 **kwargs: Any):
         self.pc_range = pc_range
         self.out_size_factor = out_size_factor
         self.voxel_size = voxel_size

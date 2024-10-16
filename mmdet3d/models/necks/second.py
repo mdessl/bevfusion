@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+from typing import Any
 import numpy as np
 import torch
 from mmcv.cnn import build_conv_layer, build_norm_layer, build_upsample_layer
@@ -35,6 +36,7 @@ class SECONDFPN(BaseModule):
         conv_cfg=dict(type="Conv2d", bias=False),
         use_conv_for_no_stride=False,
         init_cfg=None,
+        **kwargs: Any
     ):
         # if for GroupNorm,
         # cfg is dict(type='GN', num_groups=num_groups, eps=1e-3, affine=True)

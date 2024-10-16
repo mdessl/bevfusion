@@ -266,7 +266,7 @@ test_pipeline:
     keyframe_only: true 
 
 data:
-  samples_per_gpu: 2
+  samples_per_gpu: 4
   workers_per_gpu: 4
   train:
     type: CBGSDataset
@@ -284,7 +284,7 @@ data:
   val:
     type: ${dataset_type}
     dataset_root: ${dataset_root}
-    ann_file: ${dataset_root + "nuscenes_infos_val.pkl"}
+    ann_file: ${dataset_root + "nuscenes_infos_val.pkl"} # nuscenes_infos_val.pkl only 2scenes
     pipeline: ${test_pipeline}
     object_classes: ${object_classes}
     map_classes: ${map_classes}
@@ -294,14 +294,14 @@ data:
   test:
     type: ${dataset_type}
     dataset_root: ${dataset_root}
-    ann_file: ${dataset_root + "nuscenes_infos_val.pkl"}
+    ann_file: ${dataset_root + "nuscenes_infos_val.pkl"} # nuscenes_infos_test_10
     pipeline: ${test_pipeline}
     object_classes: ${object_classes}
     map_classes: ${map_classes}
     modality: ${input_modality}
     test_mode: true
     box_type_3d: LiDAR
-
+#validscenes_n10
 evaluation:
   interval: 1
   pipeline: ${test_pipeline}
