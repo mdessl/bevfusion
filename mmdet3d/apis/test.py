@@ -131,20 +131,30 @@ def single_gpu_test_2_models_bbox(model_lidar, model_camera, data_loader, zero_t
     results = []
     dataset = data_loader.dataset
     prog_bar = mmcv.ProgressBar(len(dataset))
-    modality, zero_tensor_ratio = zero_tensor_ratio
+    #modality, zero_tensor_ratio = zero_tensor_ratio
     # Randomly sample indices for zero tensors
-    num_zeros = int(len(data_loader) * zero_tensor_ratio)
-    zero_indices = set(torch.randperm(len(data_loader))[:num_zeros].tolist())
+    #num_zeros = int(len(data_loader) * zero_tensor_ratio)
+    #zero_indices = set(torch.randperm(len(data_loader))[:num_zeros].tolist())
     
     for i, data in enumerate(data_loader):
         with torch.no_grad():
+            
 
-            #res_lidar = model_lidar.module.forward_single_with_logits(**data, modality="camera")
-            res_lidar = model_lidar(return_loss=False, rescale=True, **data)
-            import pdb; pdb.set_trace()
-            res_cam = model_camera(return_loss=False, rescale=True, **data)
-            res_lidar[0]["x"][0].sum()
-            if True: # we want to test the merging method. ideally, it would perform best than both single modality tests on bevfusion
+            if True:
+                res_lidar = model_lidar(return_loss=False, rescale=True, **data, model_cam=model_camera)
+                #res_cam = model_camera(return_loss=False, rescale=True, **data)
+                import pdb;pdb.set_trace()
+
+
+
+            elif False:
+
+                #res_lidar = model_lidar.module.forward_single_with_logits(**data, modality="camera")
+                res_lidar = model_lidar(return_loss=False, rescale=True, **data)
+                import pdb; pdb.set_trace()
+                res_cam = model_camera(return_loss=False, rescale=True, **data)
+                res_lidar[0]["x"][0].sum()
+            elif False: # we want to test the merging method. ideally, it would perform best than both single modality tests on bevfusion
                 #import pdb; pdb.set_trace()
                 data["points"].data[0][0] = torch.zeros_like(data["points"].data[0][0])
                 res_lidar = model_lidar(return_loss=False, rescale=True, **data)

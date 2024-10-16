@@ -178,6 +178,7 @@ def run_experiment(args):
     if args.out is not None and not args.out.endswith((".pkl", ".pickle")):
         raise ValueError("The output file must be a pkl file.")
 
+    model, model_lidar = get_pretrained_single_modality_models_bbox()
     configs.load(args.config, recursive=True)
     cfg = Config(recursive_eval(configs), filename=args.config)
 
@@ -202,8 +203,8 @@ def run_experiment(args):
             for ds_cfg in cfg.data.test:
                 ds_cfg.pipeline = replace_ImageToTensor(ds_cfg.pipeline)
     
-    #if args.feature_type is not None and args.zero_tensor_ratio:
-    #    cfg.data.test.pipeline.insert(9,dict(type='AddMissingModality', zero_ratio=args.zero_tensor_ratio, zero_modality=args.feature_type))
+    if args.feature_type is not None and args.zero_tensor_ratio:
+        cfg.data.test.pipeline.insert(9,dict(type='AddMissingModality', zero_ratio=args.zero_tensor_ratio, zero_modality=args.feature_type))
     
     samples_per_gpu = 1
     #import pdb; pdb.set_trace()
@@ -220,22 +221,6 @@ def run_experiment(args):
         dist=distributed,
         shuffle=False,
     )
-
-    custom_args = {
-        'empty_tensor': getattr(args, 'empty_tensor'),
-        'feature_type': getattr(args, 'feature_type'),
-        'use_sbnet': getattr(args, 'use_sbnet'),
-        'zero_tensor_ratio': args.zero_tensor_ratio
-    }
-    
-    # Always include all_scenes
-    #all_scenes = np.unique([d["metas"].data["scene_token"] for d in dataset]).tolist()
-    custom_args['all_scenes'] = get_all_scenes(cfg.data.val.ann_file)
-
-    with open('custom_args.json', 'w') as f:
-        json.dump(custom_args, f)
-    print(custom_args)
-
 
     cfg.model.train_cfg = None
     model = build_model(cfg.model, test_cfg=cfg.get("test_cfg"))
@@ -261,7 +246,7 @@ def run_experiment(args):
     if not distributed:
         if True: # test on pretrained single modality models
             if "bbox" in args.eval:
-                #model, model_lidar = get_pretrained_single_modality_models_bbox(cfg)
+                #model, model_lidar = get_pretrained_single_modality_models_bbox()
                 model = MMDataParallel(model, device_ids=[0])
                 outputs = single_gpu_test_2_models_bbox(model, model, data_loader, (args.feature_type, args.zero_tensor_ratio))
             elif "map" in args.eval:
@@ -317,12 +302,13 @@ def get_pretrained_single_modality_models_seg(cfg):
     return model, model_lidar
 
 
-def get_pretrained_single_modality_models_bbox(cfg): # the point here is the use the exact same model twice 
+def get_pretrained_single_modality_models_bbox(): # the point here is the use the exact same model twice 
+    from torchpack.utils.config import configs
 
-    configs.load("configs/nuscenes/det/centerhead/lssfpn/camera/256x704/resnet/default.yaml", recursive=True)
-    cfg_camera = Config(recursive_eval(configs), filename="/root/bevfusion/configs/nuscenes/det/centerhead/lssfpn/camera/256x704/swint/default.yaml")
-    configs.load("configs/nuscenes/det/transfusion/secfpn/lidar/voxelnet.yaml", recursive=True)
-    cfg_lidar = Config(recursive_eval(configs), filename="configs/nuscenes/det/transfusion/secfpn/lidar/voxelnet_0p075.yaml")
+    configs.load("/home/bevfusion/configs/nuscenes/det/centerhead/lssfpn/camera/256x704/swint/default.yaml", recursive=True)
+    cfg_camera = Config(recursive_eval(configs), filename="/home/bevfusion/configs/nuscenes/det/centerhead/lssfpn/camera/256x704/swint/default.yaml")
+    configs.load("/home/bevfusion/configs/nuscenes/det/transfusion/secfpn/lidar/voxelnet_0p075.yaml", recursive=True)
+    cfg_lidar = Config(recursive_eval(configs), filename="/home/bevfusion/configs/nuscenes/det/transfusion/secfpn/lidar/voxelnet_0p075.yaml")
 
     model = build_model(cfg_camera.model, test_cfg=cfg_camera.get("test_cfg")) # model is camera
     model_lidar = build_model(cfg_lidar.model, test_cfg=cfg_lidar.get("test_cfg"))
@@ -332,7 +318,6 @@ def get_pretrained_single_modality_models_bbox(cfg): # the point here is the use
     checkpoint = load_checkpoint(model, "pretrained/camera-only-det.pth", map_location="cpu")
     checkpoint = load_checkpoint(model_lidar, "pretrained/lidar-only-det.pth", map_location="cpu")
 
-    import pdb; pdb.set_trace()
 
     model = MMDataParallel(model, device_ids=[0])
     model_lidar = MMDataParallel(model_lidar, device_ids=[0])
@@ -357,28 +342,27 @@ def main():
 
     if args.run_experiment:
         zero_tensor_ratios = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0] # 
-        tasks = {'map':"map/mean/iou@max"}
+        tasks = {'map':"map/mean/iou@max", "bbox": "object/map"}
+        metric = tasks[args.eval[0]]
         modalities = ['lidar','camera']
 
-        for name, metric in tasks.items():
-            for modality in modalities:
-                args.empty_tensor = 'img' if modality == 'camera' else 'points'
-                args.feature_type = modality
-                args.eval = [name]
-                results = []
-                results_dict = {}
+        for modality in modalities:
+            args.empty_tensor = 'img' if modality == 'camera' else 'points'
+            args.feature_type = modality
+            results = []
+            results_dict = {}
 
-                for ratio in zero_tensor_ratios:
-                    args.zero_tensor_ratio = ratio
-                    result = run_experiment(args)
-                    results.append(result[metric])
-                    results_dict[ratio] = result[metric]
-                with open(f'results_dict_{args.empty_tensor}.json', 'w') as f:
-                    json.dump(results_dict, f)
-                print(f"Results for {name} task, when {modality} modality is not present 0-100% of the time: {results}")
-                
-                output_file = f'{args.plot_output}_{name}_{modality}.png'
-                plot_results(zero_tensor_ratios, results, name, modality, output_file)
+            for ratio in zero_tensor_ratios:
+                args.zero_tensor_ratio = ratio
+                result = run_experiment(args)
+                results.append(result[metric])
+                results_dict[ratio] = result[metric]
+            with open(f'results_dict_{args.empty_tensor}.json', 'w') as f:
+                json.dump(results_dict, f)
+            print(f"Results for {args.eval[0]} task, when {modality} modality is not present 0-100% of the time: {results_dict}")
+            
+            output_file = f'{args.plot_output}_{args.eval[0]}_{modality}.png'
+            plot_results(zero_tensor_ratios, results, args.eval[0], modality, output_file)
     else:
         result = run_experiment(args)
         print(f"Evaluation result for zero_tensor_ratio {args.zero_tensor_ratio}: {result}")

@@ -110,32 +110,6 @@ class BEVFusion(Base3DFusionModel):
             "AwareDBEVDepth",
         ]
 
-        self.init_weights()
-
-        if self.costum_args.get("empty_tensor", None):
-            self.set_zero_tensor_params()
-
-            if self.costum_args.get("use_sbnet", None):
-                self.use_sbnet = True
-            else:
-                self.use_sbnet = False
-        self.use_sbnet = True
-
-    def set_zero_tensor_params(self):
-
-        self.feature_type = self.costum_args["empty_tensor"]
-        self.zero_tensor_ratio = self.costum_args["zero_tensor_ratio"]
-        self.all_scene_tokens = self.costum_args["all_scenes"]
-        num_zero_scenes = int(len(self.all_scene_tokens) * self.zero_tensor_ratio)
-        self.zero_tensor_scenes = list(
-            set(random.sample(self.all_scene_tokens, num_zero_scenes))
-        )
-        print(f"Total scenes: {len(self.all_scene_tokens)}")
-        print(f"Number of scenes with zero tensors: {num_zero_scenes}")
-        print(f"Scenes with zero tensors: {sorted(self.zero_tensor_scenes)}")
-
-    def should_zero_tensor(self, scene_token):
-        return scene_token in self.zero_tensor_scenes
 
     def init_weights(self) -> None:
         if "camera" in self.encoders:
@@ -223,41 +197,6 @@ class BEVFusion(Base3DFusionModel):
 
         return feats, coords, sizes
 
-    def determine_zero_tensors(self, img, points, metas):
-        """
-        Determine whether to set image or point tensors to zero based on custom args.
-        """
-        if not hasattr(self, "costum_args") or not self.costum_args:
-            return img, points
-
-        feature_type = self.costum_args.get("feature_type")
-        scene_token = metas[0].get("scene_token", None)
-
-        if self.costum_args.get("all_scenes") and self.should_zero_tensor(scene_token):
-            empty_tensor = self.costum_args.get("empty_tensor")
-            if empty_tensor == "img":
-                img = torch.zeros_like(img)
-            elif empty_tensor == "points":
-                points = [torch.zeros_like(p) for p in points]
-
-        return img, points
-
-    def create_zero_tensors(self, img, points, metas):
-        """
-        Determine whether to set image or point tensors to zero based on custom args.
-        """
-        if not hasattr(self, "costum_args") or not self.costum_args:
-            return img, points
-        self.custom_args = json.load(open("custom_args.json", "r"))
-        empty_tensor = self.costum_args.get("empty_tensor")
-        if random.random() < self.zero_tensor_ratio:
-            if empty_tensor == "img":
-                img = torch.zeros_like(img)
-            elif empty_tensor == "points":
-                points = [torch.zeros_like(p) for p in points]
-
-        return img, points
-
     @auto_fp16(apply_to=("img", "points"))
     def forward(
         self,
@@ -279,7 +218,7 @@ class BEVFusion(Base3DFusionModel):
         gt_labels_3d=None,
         **kwargs,
     ):
-        if self.use_sbnet and self.training:
+        if self.training:
             pass
         else:
             pass
@@ -313,6 +252,13 @@ class BEVFusion(Base3DFusionModel):
         if False:  # inference with sbnet
             modality = args["metas"][0]["sbnet_modality"]
             return self.forward_sbnet(**args, modality=modality)  # camera or lidar
+        elif True:
+            lidar = self.forward_single_with_logits(**args)
+            cam = kwargs["model_cam"](**args)
+            
+            import pdb; pdb.set_trace()
+            #return 
+
         elif False:
             modality = args["metas"][0]["sbnet_modality"]
             img_temp = args["img"].clone()
@@ -549,7 +495,6 @@ class BEVFusion(Base3DFusionModel):
             # avoid OOM
             features = features[::-1]
 
-        print(features)
         # Remove fusion step if only one feature type is used
         if len(features) == 1 or sbnet_modality:
             assert len(features) == 1, features
