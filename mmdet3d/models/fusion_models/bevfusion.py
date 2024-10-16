@@ -5,7 +5,7 @@ from mmcv.runner import auto_fp16, force_fp32
 from torch import nn
 from torch.nn import functional as F
 import random
-import os, json 
+import os, json
 
 from mmdet3d.models.builder import (
     build_backbone,
@@ -40,7 +40,7 @@ class BEVFusion(Base3DFusionModel):
                 self.costum_args = json.load(f)
         else:
             self.costum_args = {}
-        
+
         self.encoders = nn.ModuleDict()
         if encoders.get("camera") is not None:
             self.encoders["camera"] = nn.ModuleDict(
@@ -120,7 +120,6 @@ class BEVFusion(Base3DFusionModel):
             else:
                 self.use_sbnet = False
         self.use_sbnet = True
-     
 
     def set_zero_tensor_params(self):
 
@@ -242,6 +241,7 @@ class BEVFusion(Base3DFusionModel):
                 points = [torch.zeros_like(p) for p in points]
 
         return img, points
+
     def create_zero_tensors(self, img, points, metas):
         """
         Determine whether to set image or point tensors to zero based on custom args.
@@ -257,6 +257,7 @@ class BEVFusion(Base3DFusionModel):
                 points = [torch.zeros_like(p) for p in points]
 
         return img, points
+
     @auto_fp16(apply_to=("img", "points"))
     def forward(
         self,
@@ -282,9 +283,8 @@ class BEVFusion(Base3DFusionModel):
             pass
         else:
             pass
-            #img, points = self.create_zero_tensors(img, points, metas)
-            #print("setting zero tensors")
-
+            # img, points = self.create_zero_tensors(img, points, metas)
+            # print("setting zero tensors")
 
         args = {
             "img": img,
@@ -308,26 +308,28 @@ class BEVFusion(Base3DFusionModel):
 
         if isinstance(img, list):
             raise NotImplementedError
-        
-        #self.use_sbnet = True
+
+        # self.use_sbnet = True
         if False:  # inference with sbnet
-            modality = args["metas"][0]['sbnet_modality']
-            return self.forward_sbnet(**args, modality=modality) # camera or lidar
-        elif True:
-            modality = args["metas"][0]['sbnet_modality']
+            modality = args["metas"][0]["sbnet_modality"]
+            return self.forward_sbnet(**args, modality=modality)  # camera or lidar
+        elif False:
+            modality = args["metas"][0]["sbnet_modality"]
             img_temp = args["img"].clone()
             args["img"] = torch.zeros_like(img)
             lid = self.forward_single_with_logits(**args)
             args["img"] = img_temp
             args["points"] = [torch.zeros_like(p) for p in args["points"]]
             cam = self.forward_single_with_logits(**args)
-            import pdb; pdb.set_trace()
-        elif False:#self.use_sbnet and not self.training:  # inference with sbnet
+            import pdb
+
+            pdb.set_trace()
+        elif False:  # self.use_sbnet and not self.training:  # inference with sbnet
             output_img = self.forward_sbnet(**args, modality="camera")
             output_lidar = self.forward_sbnet(**args, modality="lidar")
             return self.sbnet_forward_inference(output_img, output_lidar, args)
         else:
-            #äimport pdb; pdb.set_trace()
+            # äimport pdb; pdb.set_trace()
             outputs = self.forward_single(**args)
             return outputs
 
@@ -475,7 +477,9 @@ class BEVFusion(Base3DFusionModel):
                         )
                     elif head_type == "map":
                         combined_outputs[i] = output_img[i]
-                        combined_outputs[i]["masks_bev"] = (output_img[i]["masks_bev"] + output_lidar[i]["masks_bev"]) / 2
+                        combined_outputs[i]["masks_bev"] = (
+                            output_img[i]["masks_bev"] + output_lidar[i]["masks_bev"]
+                        ) / 2
 
             else:
                 raise ValueError(
@@ -608,139 +612,137 @@ class BEVFusion(Base3DFusionModel):
                     raise ValueError(f"unsupported head: {type}")
             return outputs
 
-    @auto_fp16(apply_to=("img", "points"))    
+    @auto_fp16(apply_to=("img", "points"))
     def forward_single_with_logits(
-            self,
-            img,
-            points,
-            camera2ego,
-            lidar2ego,
-            lidar2camera,
-            lidar2image,
-            camera_intrinsics,
-            camera2lidar,
-            img_aug_matrix,
-            lidar_aug_matrix,
-            metas,
-            depths=None,
-            radar=None,
-            gt_masks_bev=None,
-            gt_bboxes_3d=None,
-            gt_labels_3d=None,
-            modality="camera",  # New parameter to specify the modality
-            **kwargs,
+        self,
+        img,
+        points,
+        camera2ego,
+        lidar2ego,
+        lidar2camera,
+        lidar2image,
+        camera_intrinsics,
+        camera2lidar,
+        img_aug_matrix,
+        lidar_aug_matrix,
+        metas,
+        depths=None,
+        radar=None,
+        gt_masks_bev=None,
+        gt_bboxes_3d=None,
+        gt_labels_3d=None,
+        modality="camera",  # New parameter to specify the modality
+        **kwargs,
+    ):
+        features = []
+        auxiliary_losses = {}
+        feature_type = getattr(self, "feature_type", None)
+        sbnet_modality = getattr(self, "sbnet_modality", None)
+
+        for sensor in (
+            self.encoders if self.training else list(self.encoders.keys())[::-1]
         ):
-            features = []
-            auxiliary_losses = {}
-            feature_type = getattr(self, "feature_type", None)
-            sbnet_modality = getattr(self, "sbnet_modality", None)
+            # Skip processing if it's not the specified feature type
+            if feature_type and sensor != feature_type:
+                # import pdb; pdb.set_trace()
+                continue
 
-            for sensor in (
-                self.encoders if self.training else list(self.encoders.keys())[::-1]
-            ):
-                # Skip processing if it's not the specified feature type
-                if (
-                    feature_type
-                    and sensor != feature_type
-                ):
-                    #import pdb; pdb.set_trace()
-                    continue
+            if sensor == "camera":
+                feature = self.extract_camera_features(
+                    img,
+                    points,
+                    radar,
+                    camera2ego,
+                    lidar2ego,
+                    lidar2camera,
+                    lidar2image,
+                    camera_intrinsics,
+                    camera2lidar,
+                    img_aug_matrix,
+                    lidar_aug_matrix,
+                    metas,
+                    gt_depths=depths,
+                )
+                if self.use_depth_loss:
+                    feature, auxiliary_losses["depth"] = feature[0], feature[-1]
+            elif sensor == "lidar":
+                feature = self.extract_features(points, sensor)
+            elif sensor == "radar":
+                feature = self.extract_features(radar, sensor)
+            else:
+                raise ValueError(f"unsupported sensor: {sensor}")
 
-                if sensor == "camera":
-                    feature = self.extract_camera_features(
-                        img,
-                        points,
-                        radar,
-                        camera2ego,
-                        lidar2ego,
-                        lidar2camera,
-                        lidar2image,
-                        camera_intrinsics,
-                        camera2lidar,
-                        img_aug_matrix,
-                        lidar_aug_matrix,
-                        metas,
-                        gt_depths=depths,
-                    )
-                    if self.use_depth_loss:
-                        feature, auxiliary_losses["depth"] = feature[0], feature[-1]
-                elif sensor == "lidar":
-                    feature = self.extract_features(points, sensor)
-                elif sensor == "radar":
-                    feature = self.extract_features(radar, sensor)
+            features.append(feature)
+
+        if not self.training:
+            # avoid OOM
+            features = features[::-1]
+
+        # Remove fusion step if only one feature type is used
+        if len(features) == 1 or sbnet_modality:
+            assert len(features) == 1, features
+            x = features[0]
+            print("wrong")
+        elif self.fuser:
+            x = self.fuser(features)
+        else:
+            raise ("error")
+        batch_size = x.shape[0]
+
+        x = self.decoder["backbone"](x)
+        x = self.decoder["neck"](x)
+        if self.training:
+            outputs = {}
+            for type, head in self.heads.items():
+                if type == "object":
+                    pred_dict = head(x, metas)
+                    losses = head.loss(gt_bboxes_3d, gt_labels_3d, pred_dict)
+                elif type == "map":
+                    losses = head(x, gt_masks_bev)
                 else:
-                    raise ValueError(f"unsupported sensor: {sensor}")
-
-                features.append(feature)
-
-            if not self.training:
-                # avoid OOM
-                features = features[::-1]
-
-            # Remove fusion step if only one feature type is used
-            if len(features) == 1 or sbnet_modality:
-                assert len(features) == 1, features
-                x = features[0]
-                print("wrong")
-            elif self.fuser:
-                x = self.fuser(features)
-            else:
-                raise ("error")
-            batch_size = x.shape[0]
-
-            x = self.decoder["backbone"](x)
-            x = self.decoder["neck"](x)
-            if self.training:
-                outputs = {}
-                for type, head in self.heads.items():
-                    if type == "object":
-                        pred_dict = head(x, metas)
-                        losses = head.loss(gt_bboxes_3d, gt_labels_3d, pred_dict)
-                    elif type == "map":
-                        losses = head(x, gt_masks_bev)
+                    raise ValueError(f"unsupported head: {type}")
+                for name, val in losses.items():
+                    if val.requires_grad:
+                        outputs[f"loss/{type}/{name}"] = val * self.loss_scale[type]
                     else:
-                        raise ValueError(f"unsupported head: {type}")
-                    for name, val in losses.items():
-                        if val.requires_grad:
-                            outputs[f"loss/{type}/{name}"] = val * self.loss_scale[type]
-                        else:
-                            outputs[f"stats/{type}/{name}"] = val
-                if self.use_depth_loss and modality == "camera":
-                    if "depth" in auxiliary_losses:
-                        outputs["loss/depth"] = auxiliary_losses["depth"]
-                    else:
-                        raise ValueError("Use depth loss is true, but depth loss not found")
-                return outputs
-            else:
-                outputs = [{} for _ in range(batch_size)]
-                for type, head in self.heads.items():
-                    if type == "object":
-                        pred_dict = head(x, metas)
-                        bboxes = head.get_bboxes(pred_dict, metas)
-                        for k, (boxes, scores, labels) in enumerate(bboxes):
-                            outputs[k].update(
-                                {
-                                    "boxes_3d": boxes.to("cpu"),
-                                    "scores_3d": scores.cpu(),
-                                    "labels_3d": labels.cpu(),
-                                    "x": x,
-                                    "metas": metas,
-                                    "head": head,
-                                    "pred_dict": pred_dict
-                                }
-                            )
-                    elif type == "map":
-                        logits = head(x)
-                        for k in range(batch_size):
-                            outputs[k].update(
-                                {
-                                    "masks_bev": logits[k].cpu(),
-                                    "gt_masks_bev": gt_masks_bev[k].cpu(),
-                                }
-                            )
-                    else:
-                        raise ValueError(f"unsupported head: {type}")
-                return outputs
+                        outputs[f"stats/{type}/{name}"] = val
+            if self.use_depth_loss and modality == "camera":
+                if "depth" in auxiliary_losses:
+                    outputs["loss/depth"] = auxiliary_losses["depth"]
+                else:
+                    raise ValueError("Use depth loss is true, but depth loss not found")
+            return outputs
+        else:
+            outputs = [{} for _ in range(batch_size)]
+            for type, head in self.heads.items():
+                if type == "object":
+                    pred_dict = head(x, metas)
+                    bboxes = head.get_bboxes(pred_dict, metas)
+                    for k, (boxes, scores, labels) in enumerate(bboxes):
+                        outputs[k].update(
+                            {
+                                "boxes_3d": boxes.to("cpu"),
+                                "scores_3d": scores.cpu(),
+                                "labels_3d": labels.cpu(),
+                                "x": x,
+                                "metas": metas,
+                                "head": head,
+                                "pred_dict": pred_dict,
+                            }
+                        )
+                elif type == "map":
+                    logits = head(x)
+                    for k in range(batch_size):
+                        outputs[k].update(
+                            {
+                                "masks_bev": logits[k].cpu(),
+                                "gt_masks_bev": gt_masks_bev[k].cpu(),
+                            }
+                        )
+                else:
+                    raise ValueError(f"unsupported head: {type}")
+            return outputs
+
 
 @FUSIONMODELS.register_module()
 class SBNet(Base3DFusionModel):
@@ -753,7 +755,6 @@ class SBNet(Base3DFusionModel):
         **kwargs,
     ) -> None:
         super().__init__()
-
 
         self.encoders = nn.ModuleDict()
         if encoders.get("camera") is not None:
@@ -825,8 +826,6 @@ class SBNet(Base3DFusionModel):
         ]
 
         self.init_weights()
-
-
 
     def init_weights(self) -> None:
         if "camera" in self.encoders:
@@ -914,7 +913,6 @@ class SBNet(Base3DFusionModel):
 
         return feats, coords, sizes
 
-
     @auto_fp16(apply_to=("img", "points"))
     def forward(
         self,
@@ -959,14 +957,14 @@ class SBNet(Base3DFusionModel):
 
         if isinstance(img, list):
             raise NotImplementedError
-        
+
         if self.training:  # inference with sbnet
             output_img = self.forward_single(**args, modality="camera")
             output_lidar = self.forward_single(**args, modality="lidar")
             return self.sbnet_forward_inference(output_img, output_lidar, args)
         else:
-            modality = args["metas"][0]['sbnet_modality']
-            return self.forward_single(**args, modality=modality) # camera or lidar
+            modality = args["metas"][0]["sbnet_modality"]
+            return self.forward_single(**args, modality=modality)  # camera or lidar
 
     def forward_single(
         self,
@@ -1070,6 +1068,7 @@ class SBNet(Base3DFusionModel):
                 else:
                     raise ValueError(f"unsupported head: {type}")
             return outputs
+
     def sbnet_forward_inference(self, output_img, output_lidar, args):
         batch_size = len(output_img)
         combined_outputs = [{} for _ in range(batch_size)]
@@ -1111,7 +1110,9 @@ class SBNet(Base3DFusionModel):
                         )
                     elif head_type == "map":
                         combined_outputs[i] = output_img[i]
-                        combined_outputs[i]["masks_bev"] = (output_img[i]["masks_bev"] + output_lidar[i]["masks_bev"]) / 2
+                        combined_outputs[i]["masks_bev"] = (
+                            output_img[i]["masks_bev"] + output_lidar[i]["masks_bev"]
+                        ) / 2
 
             else:
                 raise ValueError(
