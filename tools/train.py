@@ -111,9 +111,9 @@ def main():
 
     # m = torch.load("pretrained/model.pt")
     # model.encoders.lidar = m.encoders.lidar
-    #state_dict = torch.load("pretrained/bevfusion-det.pth")["state_dict"]
-    #model.load_state_dict(state_dict)
-    #model = add_layer_channel_correction(model, 256)
+    state_dict = torch.load("pretrained/bevfusion-seg.pth")["state_dict"]
+    model.load_state_dict(state_dict)
+    model = add_layer_channel_correction(model, 256)
 
     # lidar = torch.load("pt/lidar.pt")
     # camera = torch.load("pt/camera.pt")
