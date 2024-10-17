@@ -515,7 +515,6 @@ class BEVFusion(Base3DFusionModel):
         if len(features) == 1 or sbnet_modality:
             assert len(features) == 1, features
             x = features[0]
-            print("wrong")
         elif self.fuser:
             x = self.fuser(features)
         else:

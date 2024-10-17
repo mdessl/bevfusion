@@ -108,21 +108,22 @@ def main():
 
     model = build_model(cfg.model)
     model.init_weights()
+
     # m = torch.load("pretrained/model.pt")
     # model.encoders.lidar = m.encoders.lidar
+    #state_dict = torch.load("pretrained/bevfusion-det.pth")["state_dict"]
+    #model.load_state_dict(state_dict)
     #model = add_layer_channel_correction(model, 256)
-    # state_dict = torch.load("runs/sbnet_3epochs/epoch_3.pth")["state_dict"]
-    # model.load_state_dict(state_dict)
 
     # lidar = torch.load("pt/lidar.pt")
     # camera = torch.load("pt/camera.pt")
     # model.encoders.camera = lidar.module.encoders.camera
     # model.encoders.lidar = camera.module.encoders.lidar
 
-    # for param in model.encoders.parameters():
-    #    param.requires_grad = False
-    # for param in model.encoders.camera.vtransform.downsample.parameters():
-    #    param.requires_grad = True
+    for param in model.encoders.parameters():
+        param.requires_grad = False
+    for param in model.encoders.camera.vtransform.downsample.parameters():
+        param.requires_grad = True
 
     datasets = [build_dataset(cfg.data.train)]
 

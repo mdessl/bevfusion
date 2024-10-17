@@ -122,6 +122,7 @@ optimizer_config:
   grad_clip:
     max_norm: 35
     norm_type: 2
+#cumulative_iters: 16
 
 lr_config:
   policy: cyclic
@@ -129,5 +130,9 @@ lr_config:
 momentum_config:
   policy: cyclic
 
-load_from: pretrained/bevfusion-seg.pth
-freeze_sbnet: true
+
+
+
+
+#load_from: pretrained/bevfusion-seg.pth
+#freeze_sbnet: true
