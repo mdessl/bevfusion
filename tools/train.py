@@ -15,7 +15,7 @@ from mmcv.runner import load_checkpoint
 from mmdet3d.apis import train_model
 from mmdet3d.datasets import build_dataset, nuscenes_dataset
 from mmdet3d.models import build_model
-from mmdet3d.utils import get_root_logger, convert_sync_batchnorm, recursive_eval, convert_ghost_batchnorm
+from mmdet3d.utils import get_root_logger, convert_sync_batchnorm, recursive_eval
 
 import torch.nn as nn
 import torch
@@ -63,7 +63,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config", metavar="FILE", help="config file")
     parser.add_argument(
-        "checkpoint", help="checkpoint file"
+        "--checkpoint", help="checkpoint file"
     )  # pretrained/bevfusion-seg.pth
     parser.add_argument("--run-dir", metavar="DIR", help="run directory")
     args, opts = parser.parse_known_args()
@@ -110,7 +110,7 @@ def main():
     model.init_weights()
     # m = torch.load("pretrained/model.pt")
     # model.encoders.lidar = m.encoders.lidar
-    model = add_layer_channel_correction(model, 256)
+    #model = add_layer_channel_correction(model, 256)
     # state_dict = torch.load("runs/sbnet_3epochs/epoch_3.pth")["state_dict"]
     # model.load_state_dict(state_dict)
 
@@ -135,7 +135,6 @@ def main():
             cfg["sync_bn"] = dict(exclude=[])
         model = convert_sync_batchnorm(model, exclude=cfg["sync_bn"]["exclude"])
 
-    model = convert_ghost_batchnorm(model, num_splits=16)
     logger.info(f"Model:\n{model}")
     train_model(
         model,

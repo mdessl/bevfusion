@@ -252,7 +252,7 @@ class BEVFusion(Base3DFusionModel):
         if False:  # inference with sbnet
             modality = args["metas"][0]["sbnet_modality"]
             return self.forward_sbnet(**args, modality=modality)  # camera or lidar
-        elif True:
+        elif False:
             if args.get("run_model_cam", None):
                 return self.forward_single_with_logits(**args)
 
