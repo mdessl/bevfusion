@@ -178,7 +178,7 @@ def run_experiment(args):
     if args.out is not None and not args.out.endswith((".pkl", ".pickle")):
         raise ValueError("The output file must be a pkl file.")
 
-    model, model_lidar = get_pretrained_single_modality_models_bbox()
+    #model, model_lidar = get_pretrained_single_modality_models_bbox()
     configs.load(args.config, recursive=True)
     cfg = Config(recursive_eval(configs), filename=args.config)
 
@@ -244,7 +244,7 @@ def run_experiment(args):
         model = fuse_conv_bn(model)
 
     if not distributed:
-        if True: # test on pretrained single modality models
+        if False: # test on pretrained single modality models
             if "bbox" in args.eval:
                 #model, model_lidar = get_pretrained_single_modality_models_bbox()
                 model = MMDataParallel(model, device_ids=[0])
@@ -256,6 +256,7 @@ def run_experiment(args):
             model = MMDataParallel(model, device_ids=[0])
             outputs = single_gpu_test_with_ratio(model, data_loader, (args.feature_type, args.zero_tensor_ratio))
         else:
+            print("here")
             model = MMDataParallel(model, device_ids=[0])
             outputs = single_gpu_test(model, data_loader)
     else:

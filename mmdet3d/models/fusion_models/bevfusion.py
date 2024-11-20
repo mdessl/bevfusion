@@ -249,7 +249,7 @@ class BEVFusion(Base3DFusionModel):
             raise NotImplementedError
 
         # self.use_sbnet = True
-        if True:  # inference with sbnet
+        if False:  # inference with sbnet
             modality = args["metas"][0]["sbnet_modality"]
             return self.forward_sbnet(**args, modality=modality)  # camera or lidar
         elif False:

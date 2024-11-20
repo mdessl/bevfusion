@@ -159,3 +159,5 @@ single_results_dict_img.json
 single_results_dict_points.json
 test.pt
 pt/
+
+*.pth
