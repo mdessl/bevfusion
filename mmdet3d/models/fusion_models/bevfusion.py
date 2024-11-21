@@ -303,3 +303,40 @@ class BEVFusion(Base3DFusionModel):
                 else:
                     raise ValueError(f"unsupported head: {type}")
             return outputs
+
+    def extract_features(
+        self,
+        img,
+        points,
+        camera2ego,
+        lidar2ego,
+        lidar2camera,
+        lidar2image,
+        camera_intrinsics,
+        camera2lidar,
+        img_aug_matrix,
+        lidar_aug_matrix,
+        metas,
+    ) -> tuple:
+        """Extract features using existing extraction methods.
+        
+        Returns:
+            tuple: (camera_features, lidar_features)
+        """
+        camera_features = self.extract_camera_features(
+            img,
+            points,
+            camera2ego,
+            lidar2ego,
+            lidar2camera,
+            lidar2image,
+            camera_intrinsics,
+            camera2lidar,
+            img_aug_matrix,
+            lidar_aug_matrix,
+            metas,
+        ) if "camera" in self.encoders else None
+
+        lidar_features = self.extract_lidar_features(points) if "lidar" in self.encoders else None
+
+        return camera_features, lidar_features
