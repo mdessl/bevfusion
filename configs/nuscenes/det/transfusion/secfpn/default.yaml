@@ -39,7 +39,8 @@ optimizer_config:
   grad_clip:
     max_norm: 35
     norm_type: 2
-
+  cumulative_iters: 2
+  
 lr_config:
   policy: cyclic
 
