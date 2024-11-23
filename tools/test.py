@@ -178,7 +178,14 @@ def run_experiment(args):
     if args.out is not None and not args.out.endswith((".pkl", ".pickle")):
         raise ValueError("The output file must be a pkl file.")
 
-    model, model_lidar = get_pretrained_single_modality_models_bbox()
+    # New: Set config and checkpoint based on evaluation task
+    if args.eval and 'bbox' in args.eval:
+        args.config = 'configs/nuscenes/det/transfusion/secfpn/camera+lidar/swint_v0p075/convfuser.yaml'
+        args.checkpoint = 'pretrained/bevfusion-det.pth'
+    elif args.eval and 'map' in args.eval:
+        args.config = 'configs/nuscenes/seg/fusion-bev256d2-lss.yaml'
+        args.checkpoint = 'pretrained/bevfusion-seg.pth'
+
     configs.load(args.config, recursive=True)
     cfg = Config(recursive_eval(configs), filename=args.config)
 
@@ -244,7 +251,7 @@ def run_experiment(args):
         model = fuse_conv_bn(model)
 
     if not distributed:
-        if True: # test on pretrained single modality models
+        if False: # test on pretrained single modality models
             if "bbox" in args.eval:
                 #model, model_lidar = get_pretrained_single_modality_models_bbox()
                 model = MMDataParallel(model, device_ids=[0])
@@ -341,28 +348,31 @@ def main():
     dist.init()
 
     if args.run_experiment:
-        zero_tensor_ratios = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0] # 
-        tasks = {'map':"map/mean/iou@max", "bbox": "object/map"}
-        metric = tasks[args.eval[0]]
+        zero_tensor_ratios = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9,1.0]
+        tasks = {"bbox": "object/map", 'map':"map/mean/iou@max"}
         modalities = ['lidar','camera']
 
-        for modality in modalities:
-            args.empty_tensor = 'img' if modality == 'camera' else 'points'
-            args.feature_type = modality
-            results = []
-            results_dict = {}
+        for task in tasks:
+            args.eval = [task]
+            metric = tasks[task]
 
-            for ratio in zero_tensor_ratios:
-                args.zero_tensor_ratio = ratio
-                result = run_experiment(args)
-                results.append(result[metric])
-                results_dict[ratio] = result[metric]
-            with open(f'results_dict_{args.empty_tensor}.json', 'w') as f:
-                json.dump(results_dict, f)
-            print(f"Results for {args.eval[0]} task, when {modality} modality is not present 0-100% of the time: {results_dict}")
-            
-            output_file = f'{args.plot_output}_{args.eval[0]}_{modality}.png'
-            plot_results(zero_tensor_ratios, results, args.eval[0], modality, output_file)
+            for modality in modalities:
+                args.empty_tensor = 'img' if modality == 'camera' else 'points'
+                args.feature_type = modality
+                results = []
+                results_dict = {}
+
+                for ratio in zero_tensor_ratios:
+                    args.zero_tensor_ratio = ratio
+                    result = run_experiment(args)
+                    results.append(result[metric])
+                    results_dict[ratio] = result[metric]
+                with open(f'results_dict_{args.empty_tensor}_{task}.json', 'w') as f:
+                    json.dump(results_dict, f)
+                print(f"Results for {task} task, when {modality} modality is not present 0-100% of the time: {results_dict}")
+                
+                output_file = f'{args.plot_output}_{task}_{modality}.png'
+                plot_results(zero_tensor_ratios, results, task, modality, output_file)
     else:
         result = run_experiment(args)
         print(f"Evaluation result for zero_tensor_ratio {args.zero_tensor_ratio}: {result}")
