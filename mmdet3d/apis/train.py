@@ -1,8 +1,6 @@
 import torch
 from mmcv.parallel import MMDistributedDataParallel
 from mmcv.runner import (
-    HOOKS,
-    Hook,
     DistSamplerSeedHook,
     EpochBasedRunner,
     GradientCumulativeFp16OptimizerHook,
@@ -18,57 +16,6 @@ from mmdet.core import DistEvalHook
 from mmdet.datasets import build_dataloader, build_dataset, replace_ImageToTensor
 
 
-import torch.nn as nn
-
-
-@HOOKS.register_module()
-class GradientAccumulationCheckHook(Hook):
-
-    def after_train_iter(self, runner):
-        if (runner.iter + 1) % runner.optimizer.grad_accum == 0:
-            print(f"Optimizer step at iteration {runner.iter + 1}")
-            # Add your gradient checking/printing logic here if needed
-            for name, param in runner.model.module.named_parameters():  # Access model parameters through runner.model.module
-                if param.grad is not None:
-                    print(f"Gradient norm of {name}: {param.grad.norm()}")
-
-def add_layer_channel_correction(model, output_channels=256, state_dict_path="pretrained/bevfusion-seg.pth"):
-    # Get the current layers of the downsample module
-    current_layers = list(model.encoders.camera.vtransform.downsample.children())
-    
-    # Get the number of input channels from the last convolutional layer
-    input_channels = current_layers[-3].out_channels  # Assuming the last Conv2d is 3 positions from the end
-    
-    # Create the new layers you want to add
-    new_conv = nn.Conv2d(input_channels, output_channels, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
-    new_relu = nn.ReLU(inplace=True)
-    
-    # Add the new conv layer at index 9 (after the last ReLU)
-    current_layers.insert(9, new_conv)
-    
-    # Add the new ReLU at index 10
-    current_layers.insert(10, new_relu)
-    
-    # Create a new Sequential module with the updated layers
-    new_downsample = nn.Sequential(*current_layers)
-    
-    model.encoders.camera.vtransform.downsample = new_downsample
-    
-    if False:
-        # Load the state dict if a path is provided
-        if state_dict_path:
-            state_dict = torch.load(state_dict_path)
-            model.load_state_dict(state_dict, strict=False)
-        
-        # Initialize the new conv layer if it's not in the loaded state dict
-        if 'encoders.camera.vtransform.downsample.9.weight' not in model.state_dict():
-            model_state_dict = model.state_dict()
-            model_state_dict['encoders.camera.vtransform.downsample.9.weight'] = new_conv.weight
-            model.load_state_dict(model_state_dict)
-    
-    return model
-
-
 def train_model(
     model,
     dataset,
@@ -81,7 +28,7 @@ def train_model(
 
     # prepare data loaders
     dataset = dataset if isinstance(dataset, (list, tuple)) else [dataset]
-    #import pdb; pdb.set_trace()
+
     data_loaders = [
         build_dataloader(
             ds,
@@ -94,38 +41,8 @@ def train_model(
         for ds in dataset
     ]
 
-    #model=torch.load("pretrained/pretrained_sbnet_single_encoders.pt")
-    #state_dict = torch.load("pretrained/bevfusion-seg.pth")["state_dict"]
-    if False:
-        model = add_layer_channel_correction(model, 256, state_dict_path=None)
-        state_dict = torch.load("runs/run-e2518079-cd55ce4a/epoch_1.pth")["state_dict"]
-        model.load_state_dict(state_dict)
-        total_params = sum(p.numel() for p in model.parameters())
-        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        print(f"Total parameters: {total_params}")
-        print(f"Trainable parameters: {trainable_params}")
-        
-    if False:
-        for param in model.encoders.parameters():
-            param.requires_grad = False
-        for param in model.encoders.camera.vtransform.downsample.parameters():
-            param.requires_grad = True
-
-    if False:#cfg.get("freeze_sbnet", None):
-        #for param in model.encoders.parameters():
-        #    param.requires_grad = False
-        
-        state_dict_path = "runs/run-e2518079-77129fcd/epoch_1.pth"
-        if len(list(model.encoders.camera.vtransform.downsample.children())) == 9:
-            print("adding layer")
-            model = add_layer_channel_correction(model, 256, state_dict_path) # from 80 zo 25
-        else:
-            state_dict = torch.load(state_dict_path)["state_dict"]
-            model.load_state_dict(state_dict, strict=False)
-        for param in model.encoders.camera.vtransform.downsample.parameters():
-            param.requires_grad = True
-    #print("find_unused_parameters was set to False before in apis, train.py")
-    find_unused_parameters = cfg.get("find_unused_parameters", True)
+    # put model on gpus
+    find_unused_parameters = cfg.get("find_unused_parameters", False)
     # Sets the `find_unused_parameters` parameter in
     # torch.nn.parallel.DistributedDataParallel
     model = MMDistributedDataParallel(
@@ -171,8 +88,6 @@ def train_model(
     else:
         optimizer_config = cfg.optimizer_config
 
-    #custom_hooks = [dict(type='GradientAccumulationCheckHook')]
-
     # register hooks
     runner.register_training_hooks(
         cfg.lr_config,
@@ -181,7 +96,6 @@ def train_model(
         cfg.log_config,
         cfg.get("momentum_config", None),
     )
-    #custom_hooks_config=dict(custom_hooks=custom_hooks)
     if isinstance(runner, EpochBasedRunner):
         runner.register_hook(DistSamplerSeedHook())
 
@@ -209,6 +123,4 @@ def train_model(
         runner.resume(cfg.resume_from)
     elif cfg.load_from:
         runner.load_checkpoint(cfg.load_from)
-
-
     runner.run(data_loaders, [("train", 1)])

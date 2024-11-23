@@ -184,6 +184,7 @@ train_pipeline:
       - img_aug_matrix
       - lidar_aug_matrix
       - scene_token
+      - token
   -
     type: GTDepth
     keyframe_only: true 
@@ -266,7 +267,7 @@ test_pipeline:
     keyframe_only: true 
 
 data:
-  samples_per_gpu: 4
+  samples_per_gpu: 2
   workers_per_gpu: 4
   train:
     type: CBGSDataset
@@ -284,7 +285,7 @@ data:
   val:
     type: ${dataset_type}
     dataset_root: ${dataset_root}
-    ann_file: ${dataset_root + "nuscenes_infos_val.pkl"} # nuscenes_infos_val.pkl only 2scenes
+    ann_file: ${dataset_root + "nuscenes_infos_train.pkl"} # nuscenes_infos_val.pkl only 2scenes
     pipeline: ${test_pipeline}
     object_classes: ${object_classes}
     map_classes: ${map_classes}
@@ -294,7 +295,7 @@ data:
   test:
     type: ${dataset_type}
     dataset_root: ${dataset_root}
-    ann_file: ${dataset_root + "nuscenes_infos_val.pkl"} # nuscenes_infos_test_10
+    ann_file: ${dataset_root + "nuscenes_infos_train.pkl"} # nuscenes_infos_test_10
     pipeline: ${test_pipeline}
     object_classes: ${object_classes}
     map_classes: ${map_classes}
