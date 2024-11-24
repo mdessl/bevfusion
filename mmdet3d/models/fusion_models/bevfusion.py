@@ -15,7 +15,7 @@ from mmdet3d.models.builder import (
 from mmdet3d.ops import Voxelization, DynamicScatter
 from mmdet3d.models import FUSIONMODELS
 
-
+import os
 from .base import Base3DFusionModel
 
 __all__ = ["BEVFusion"]
@@ -29,6 +29,8 @@ class BEVFusion(Base3DFusionModel):
         fuser: Dict[str, Any],
         decoder: Dict[str, Any],
         heads: Dict[str, Any],
+        save_embeddings: bool = False,
+        save_path: str = None,
         **kwargs,
     ) -> None:
         super().__init__()
@@ -78,6 +80,10 @@ class BEVFusion(Base3DFusionModel):
             for name in heads:
                 if heads[name] is not None:
                     self.loss_scale[name] = 1.0
+        self.save_embeddings = save_embeddings
+        self.save_path = save_path
+        if save_embeddings and save_path is None:
+            raise ValueError("save_path must be specified when save_embeddings is True")
 
         self.init_weights()
 
@@ -222,6 +228,43 @@ class BEVFusion(Base3DFusionModel):
         gt_labels_3d=None,
         **kwargs,
     ):
+
+        if self.save_embeddings:
+            # Get token from metas
+
+            token = metas[0]['token']
+            
+            # Process and save each modality separately
+            if "camera" in self.encoders:
+                camera_feat = self.extract_camera_features(
+                    img,
+                    points,
+                    camera2ego,
+                    lidar2ego,
+                    lidar2camera,
+                    lidar2image,
+                    camera_intrinsics,
+                    camera2lidar,
+                    img_aug_matrix,
+                    lidar_aug_matrix,
+                    metas
+                )
+                if self.use_depth_loss:
+                    camera_feat = camera_feat[0]
+                camera_path = os.path.join(self.save_path, f"{token}_camera.pth")
+                torch.save(camera_feat, camera_path)
+
+            if "lidar" in self.encoders:
+                lidar_feat = self.extract_lidar_features(points)
+                lidar_path = os.path.join(self.save_path, f"{token}_lidar.pth")
+                torch.save(lidar_feat, lidar_path)
+
+            return {}  # Return empty dict since we've saved the features
+
+        # Normal forward pass if not saving embeddings
+        features = []
+        auxiliary_losses = {}
+
         features = []
         for sensor in (
             self.encoders if self.training else list(self.encoders.keys())[::-1]
