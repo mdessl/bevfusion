@@ -31,31 +31,40 @@ class BEVFusion(Base3DFusionModel):
         heads: Dict[str, Any],
         save_embeddings: bool = False,
         save_path: str = None,
+        precomputed: bool = False,
         **kwargs,
     ) -> None:
         super().__init__()
 
-        self.encoders = nn.ModuleDict()
-        if encoders.get("camera") is not None:
-            self.encoders["camera"] = nn.ModuleDict(
-                {
-                    "backbone": build_backbone(encoders["camera"]["backbone"]),
-                    "neck": build_neck(encoders["camera"]["neck"]),
-                    "vtransform": build_vtransform(encoders["camera"]["vtransform"]),
-                }
-            )
-        if encoders.get("lidar") is not None:
-            if encoders["lidar"]["voxelize"].get("max_num_points", -1) > 0:
-                voxelize_module = Voxelization(**encoders["lidar"]["voxelize"])
-            else:
-                voxelize_module = DynamicScatter(**encoders["lidar"]["voxelize"])
-            self.encoders["lidar"] = nn.ModuleDict(
-                {
-                    "voxelize": voxelize_module,
-                    "backbone": build_backbone(encoders["lidar"]["backbone"]),
-                }
-            )
-            self.voxelize_reduce = encoders["lidar"].get("voxelize_reduce", True)
+        self.save_embeddings = save_embeddings
+        self.save_path = save_path
+        if save_embeddings and save_path is None:
+            raise ValueError("save_path must be specified when save_embeddings is True")
+
+        self.precomputed = precomputed
+        
+        if not precomputed:
+            self.encoders = nn.ModuleDict()
+            if encoders.get("camera") is not None:
+                self.encoders["camera"] = nn.ModuleDict(
+                    {
+                        "backbone": build_backbone(encoders["camera"]["backbone"]),
+                        "neck": build_neck(encoders["camera"]["neck"]),
+                        "vtransform": build_vtransform(encoders["camera"]["vtransform"]),
+                    }
+                )
+            if encoders.get("lidar") is not None:
+                if encoders["lidar"]["voxelize"].get("max_num_points", -1) > 0:
+                    voxelize_module = Voxelization(**encoders["lidar"]["voxelize"])
+                else:
+                    voxelize_module = DynamicScatter(**encoders["lidar"]["voxelize"])
+                self.encoders["lidar"] = nn.ModuleDict(
+                    {
+                        "voxelize": voxelize_module,
+                        "backbone": build_backbone(encoders["lidar"]["backbone"]),
+                    }
+                )
+                self.voxelize_reduce = encoders["lidar"].get("voxelize_reduce", True)
 
         if fuser is not None:
             self.fuser = build_fuser(fuser)
@@ -80,10 +89,6 @@ class BEVFusion(Base3DFusionModel):
             for name in heads:
                 if heads[name] is not None:
                     self.loss_scale[name] = 1.0
-        self.save_embeddings = save_embeddings
-        self.save_path = save_path
-        if save_embeddings and save_path is None:
-            raise ValueError("save_path must be specified when save_embeddings is True")
 
         self.init_weights()
 
@@ -228,13 +233,9 @@ class BEVFusion(Base3DFusionModel):
         gt_labels_3d=None,
         **kwargs,
     ):
-
         if self.save_embeddings:
-            # Get token from metas
-
             token = metas[0]['token']
             
-            # Process and save each modality separately
             if "camera" in self.encoders:
                 camera_feat = self.extract_camera_features(
                     img,
@@ -247,10 +248,8 @@ class BEVFusion(Base3DFusionModel):
                     camera2lidar,
                     img_aug_matrix,
                     lidar_aug_matrix,
-                    metas
+                    metas,
                 )
-                if self.use_depth_loss:
-                    camera_feat = camera_feat[0]
                 camera_path = os.path.join(self.save_path, f"{token}_camera.pth")
                 torch.save(camera_feat, camera_path)
 
@@ -259,38 +258,40 @@ class BEVFusion(Base3DFusionModel):
                 lidar_path = os.path.join(self.save_path, f"{token}_lidar.pth")
                 torch.save(lidar_feat, lidar_path)
 
-            return {}  # Return empty dict since we've saved the features
+            return {}
 
-        # Normal forward pass if not saving embeddings
-        features = []
-        auxiliary_losses = {}
-
-        features = []
-        for sensor in (
-            self.encoders if self.training else list(self.encoders.keys())[::-1]
-        ):
-            if sensor == "camera":
-                feature = self.extract_camera_features(
-                    img,
-                    points,
-                    camera2ego,
-                    lidar2ego,
-                    lidar2camera,
-                    lidar2image,
-                    camera_intrinsics,
-                    camera2lidar,
-                    img_aug_matrix,
-                    lidar_aug_matrix,
-                    metas,
-                )
-            elif sensor == "lidar":
-                feature = self.extract_lidar_features(points)
-            else:
-                raise ValueError(f"unsupported sensor: {sensor}")
-            features.append(feature)
+        if self.precomputed:
+            features = []
+            if img is not None:  # camera embeddings
+                features.append(img)
+            if points is not None:  # lidar embeddings
+                features.append(points)
+        else:
+            features = []
+            for sensor in (
+                self.encoders if self.training else list(self.encoders.keys())[::-1]
+            ):
+                if sensor == "camera":
+                    feature = self.extract_camera_features(
+                        img,
+                        points,
+                        camera2ego,
+                        lidar2ego,
+                        lidar2camera,
+                        lidar2image,
+                        camera_intrinsics,
+                        camera2lidar,
+                        img_aug_matrix,
+                        lidar_aug_matrix,
+                        metas,
+                    )
+                elif sensor == "lidar":
+                    feature = self.extract_lidar_features(points)
+                else:
+                    raise ValueError(f"unsupported sensor: {sensor}")
+                features.append(feature)
 
         if not self.training:
-            # avoid OOM
             features = features[::-1]
 
         if self.fuser is not None:

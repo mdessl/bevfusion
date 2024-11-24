@@ -1,0 +1,5 @@
+_base_: ['./fusion-bev256d2-lss.yaml']
+
+model:
+  precomputed: true
+  encoders: null  # No need for encoders when using precomputed embeddings 
