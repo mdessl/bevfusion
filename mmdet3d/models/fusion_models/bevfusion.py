@@ -11,6 +11,7 @@ from mmdet3d.models.builder import (
     build_head,
     build_neck,
     build_vtransform,
+    build_channel_layer,
 )
 from mmdet3d.ops import Voxelization, DynamicScatter
 from mmdet3d.models import FUSIONMODELS
@@ -55,6 +56,9 @@ class BEVFusion(Base3DFusionModel):
                         "vtransform": build_vtransform(encoders["camera"]["vtransform"]),
                     }
                 )
+                if encoders["camera"].get("channel_layer") is not None:
+                    self.encoders["camera"]["channel_layer"] = build_channel_layer(encoders["camera"]["channel_layer"])
+                
             if encoders.get("lidar") is not None:
                 if encoders["lidar"]["voxelize"].get("max_num_points", -1) > 0:
                     voxelize_module = Voxelization(**encoders["lidar"]["voxelize"])
@@ -66,6 +70,7 @@ class BEVFusion(Base3DFusionModel):
                         "backbone": build_backbone(encoders["lidar"]["backbone"]),
                     }
                 )
+                
                 self.voxelize_reduce = encoders["lidar"].get("voxelize_reduce", True)
 
         if fuser is not None:
@@ -92,7 +97,14 @@ class BEVFusion(Base3DFusionModel):
                 if heads[name] is not None:
                     self.loss_scale[name] = 1.0
 
-        self.init_weights()
+        #self.init_weights()
+        if False:
+            for name, param in self.named_parameters():
+                if 'encoders.camera.channel_layer' not in name:
+                    param.requires_grad = False
+                else:
+                    param.requires_grad = True
+                    print(f"Keeping {name} trainable")
 
     def init_weights(self) -> None:
         if not self.precomputed and "camera" in self.encoders:
@@ -137,6 +149,8 @@ class BEVFusion(Base3DFusionModel):
             lidar_aug_matrix,
             img_metas,
         )
+        if "channel_layer" in self.encoders["camera"]:
+            x = self.encoders["camera"]["channel_layer"](x)
         return x
 
     def extract_lidar_features(self, x) -> torch.Tensor:
@@ -194,8 +208,35 @@ class BEVFusion(Base3DFusionModel):
         gt_labels_3d=None,
         **kwargs,
     ):
+        args = {
+            "img": img,
+            "points": points,
+            "camera2ego": camera2ego,
+            "lidar2ego": lidar2ego,
+            "lidar2camera": lidar2camera,
+            "lidar2image": lidar2image,
+            "camera_intrinsics": camera_intrinsics,
+            "camera2lidar": camera2lidar,
+            "img_aug_matrix": img_aug_matrix,
+            "lidar_aug_matrix": lidar_aug_matrix,
+            "metas": metas,
+            "gt_masks_bev": gt_masks_bev,
+            "gt_bboxes_3d": gt_bboxes_3d,
+            "gt_labels_3d": gt_labels_3d,
+            **kwargs,
+        }
+
+
         if isinstance(img, list):
             raise NotImplementedError
+        if "channel_layer" in self.encoders["camera"] and self.training: #sbnet
+            modality = args["metas"][0]["sbnet_modality"]
+            return self.forward_sbnet(**args,modality=modality)  # camera or lidar
+
+        elif "channel_layer" in self.encoders["camera"] and not self.training: #sbnet
+            output_img = self.forward_sbnet(**args, modality="camera")
+            output_lidar = self.forward_sbnet(**args, modality="lidar")
+            return self.sbnet_forward_inference(output_img, output_lidar, args)
         else:
             outputs = self.forward_single(
                 img,
@@ -270,7 +311,6 @@ class BEVFusion(Base3DFusionModel):
                 features.append(camera_feat)
             if lidar_feat is not None:
                 features.append(lidar_feat)
-            print(len(features))
         else:
             features = []
             for sensor in (
@@ -371,6 +411,7 @@ class BEVFusion(Base3DFusionModel):
         Returns:
             tuple: (camera_features, lidar_features)
         """
+
         camera_features = self.extract_camera_features(
             img,
             points,
@@ -398,3 +439,149 @@ class BEVFusion(Base3DFusionModel):
         lidar_feat = torch.load(lidar_path) if os.path.exists(lidar_path) else None
         
         return camera_feat, lidar_feat
+
+    def forward_sbnet(
+        self,
+        img,
+        points,
+        camera2ego,
+        lidar2ego,
+        lidar2camera,
+        lidar2image,
+        camera_intrinsics,
+        camera2lidar,
+        img_aug_matrix,
+        lidar_aug_matrix,
+        metas,
+        depths=None,
+        radar=None,
+        gt_masks_bev=None,
+        gt_bboxes_3d=None,
+        gt_labels_3d=None,
+        modality="camera",  # New parameter to specify the modality
+        **kwargs,
+    ):
+        features = []
+        auxiliary_losses = {}
+        if modality == "camera":
+            feature = self.extract_camera_features(
+                img,
+                points,
+                camera2ego,
+                lidar2ego,
+                lidar2camera,
+                lidar2image,
+                camera_intrinsics,
+                camera2lidar,
+                img_aug_matrix,
+                lidar_aug_matrix,
+                metas
+            )
+
+        elif modality == "lidar":
+            feature = self.extract_lidar_features(points)
+
+        else:
+            raise ValueError(f"unsupported modality: {modality}")
+
+        x = feature
+        batch_size = x.shape[0]
+
+        x = self.decoder["backbone"](x)
+        x = self.decoder["neck"](x)
+
+        if self.training:
+            outputs = {}
+            for type, head in self.heads.items():
+                if type == "object":
+                    pred_dict = head(x, metas)
+                    losses = head.loss(gt_bboxes_3d, gt_labels_3d, pred_dict)
+                elif type == "map":
+                    losses = head(x, gt_masks_bev)
+                else:
+                    raise ValueError(f"unsupported head: {type}")
+                for name, val in losses.items():
+                    if val.requires_grad:
+                        outputs[f"loss/{type}/{name}"] = val * self.loss_scale[type]
+                    else:
+                        outputs[f"stats/{type}/{name}"] = val
+            return outputs
+        else:
+            outputs = [{} for _ in range(batch_size)]
+            for type, head in self.heads.items():
+                if type == "object":
+                    pred_dict = head(x, metas)
+                    bboxes = head.get_bboxes(pred_dict, metas)
+                    for k, (boxes, scores, labels) in enumerate(bboxes):
+                        outputs[k].update(
+                            {
+                                "boxes_3d": boxes.to("cpu"),
+                                "scores_3d": scores.cpu(),
+                                "labels_3d": labels.cpu(),
+                            }
+                        )
+                elif type == "map":
+                    logits = head(x)
+                    for k in range(batch_size):
+                        outputs[k].update(
+                            {
+                                "masks_bev": logits[k].cpu(),
+                                "gt_masks_bev": gt_masks_bev[k].cpu(),
+                            }
+                        )
+                else:
+                    raise ValueError(f"unsupported head: {type}")
+            print(outputs)
+            return outputs
+
+    def sbnet_forward_inference(self, output_img, output_lidar, args):
+        batch_size = len(output_img)
+        combined_outputs = [{} for _ in range(batch_size)]
+
+        for i in range(batch_size):
+
+            img_is_zero = torch.all(args["img"][i] == 0)
+            lidar_is_zero = torch.all(args["points"][i] == 0)
+
+            if img_is_zero:
+                # Only camera modality is present
+                combined_outputs[i] = output_lidar[i]
+            elif lidar_is_zero:
+                # Only LiDAR modality is present
+                combined_outputs[i] = output_img[i]
+            elif not img_is_zero and not lidar_is_zero:
+                # Both modalities are present, combine results
+                for head_type in self.heads:
+                    if head_type == "object":
+                        boxes_3d = torch.cat(
+                            [output_img[i]["boxes_3d"], output_lidar[i]["boxes_3d"]]
+                        )
+                        scores_3d = torch.cat(
+                            [output_img[i]["scores_3d"], output_lidar[i]["scores_3d"]]
+                        )
+                        labels_3d = torch.cat(
+                            [output_img[i]["labels_3d"], output_lidar[i]["labels_3d"]]
+                        )
+                        raise NotImplementedError
+                        # Perform NMS
+                        keep = self.nms_3d(boxes_3d, scores_3d, iou_threshold=0.5)
+
+                        combined_outputs[i].update(
+                            {
+                                "boxes_3d": boxes_3d[keep],
+                                "scores_3d": scores_3d[keep],
+                                "labels_3d": labels_3d[keep],
+                            }
+                        )
+                    elif head_type == "map":
+                        combined_outputs[i] = output_img[i]
+                        combined_outputs[i]["masks_bev"] = (
+                            output_img[i]["masks_bev"] + output_lidar[i]["masks_bev"]
+                        ) / 2
+
+            else:
+                raise ValueError(
+                    f"Invalid modality combination: {img_modality}, {lidar_modality}"
+                )
+
+        return combined_outputs

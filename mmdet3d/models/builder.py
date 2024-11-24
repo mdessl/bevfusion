@@ -5,7 +5,7 @@ from mmdet.models.builder import BACKBONES, HEADS, LOSSES, NECKS
 FUSIONMODELS = Registry("fusion_models")
 VTRANSFORMS = Registry("vtransforms")
 FUSERS = Registry("fusers")
-
+CHANNEL_LAYERS = Registry("channel_layers")
 
 def build_backbone(cfg):
     return BACKBONES.build(cfg)
@@ -17,6 +17,10 @@ def build_neck(cfg):
 
 def build_vtransform(cfg):
     return VTRANSFORMS.build(cfg)
+
+
+def build_channel_layer(cfg):
+    return CHANNEL_LAYERS.build(cfg)
 
 
 def build_fuser(cfg):

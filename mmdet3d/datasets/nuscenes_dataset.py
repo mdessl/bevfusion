@@ -237,6 +237,7 @@ class NuScenesDataset(Custom3DDataset):
             sweeps=info["sweeps"],
             timestamp=info["timestamp"],
             location=info["location"],
+            sbnet_modality=info.get('sbnet_modality', None)
         )
 
         # ego to global transform
