@@ -32,6 +32,7 @@ class BEVFusion(Base3DFusionModel):
         save_embeddings: bool = False,
         save_path: str = None,
         precomputed: bool = False,
+        embeddings_path: str = "embeddings/",
         **kwargs,
     ) -> None:
         super().__init__()
@@ -42,8 +43,9 @@ class BEVFusion(Base3DFusionModel):
             raise ValueError("save_path must be specified when save_embeddings is True")
 
         self.precomputed = precomputed
-        
-        if not precomputed:
+        self.embeddings_path = embeddings_path
+
+        if not self.precomputed:
             self.encoders = nn.ModuleDict()
             if encoders.get("camera") is not None:
                 self.encoders["camera"] = nn.ModuleDict(
@@ -93,7 +95,7 @@ class BEVFusion(Base3DFusionModel):
         self.init_weights()
 
     def init_weights(self) -> None:
-        if "camera" in self.encoders:
+        if not self.precomputed and "camera" in self.encoders:
             self.encoders["camera"]["backbone"].init_weights()
 
     def extract_camera_features(
@@ -262,15 +264,19 @@ class BEVFusion(Base3DFusionModel):
 
         if self.precomputed:
             features = []
-            if img is not None:  # camera embeddings
-                features.append(img)
-            if points is not None:  # lidar embeddings
-                features.append(points)
+            token = metas[0]['token']
+            camera_feat, lidar_feat = self.load_embeddings(token)
+            if camera_feat is not None:
+                features.append(camera_feat)
+            if lidar_feat is not None:
+                features.append(lidar_feat)
+            print(len(features))
         else:
             features = []
             for sensor in (
                 self.encoders if self.training else list(self.encoders.keys())[::-1]
             ):
+                print(sensor)
                 if sensor == "camera":
                     feature = self.extract_camera_features(
                         img,
@@ -290,10 +296,8 @@ class BEVFusion(Base3DFusionModel):
                 else:
                     raise ValueError(f"unsupported sensor: {sensor}")
                 features.append(feature)
-
         if not self.training:
             features = features[::-1]
-
         if self.fuser is not None:
             x = self.fuser(features)
         else:
@@ -384,3 +388,13 @@ class BEVFusion(Base3DFusionModel):
         lidar_features = self.extract_lidar_features(points) if "lidar" in self.encoders else None
 
         return camera_features, lidar_features
+
+    def load_embeddings(self, token):
+        """Load precomputed embeddings for a sample."""
+        camera_path = os.path.join(self.embeddings_path, f"{token}_camera.pth")
+        lidar_path = os.path.join(self.embeddings_path, f"{token}_lidar.pth")
+        
+        camera_feat = torch.load(camera_path) if os.path.exists(camera_path) else None
+        lidar_feat = torch.load(lidar_path) if os.path.exists(lidar_path) else None
+        
+        return camera_feat, lidar_feat

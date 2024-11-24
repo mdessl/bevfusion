@@ -2,6 +2,7 @@ import tempfile
 from os import path as osp
 from typing import Any, Dict
 
+import os
 import mmcv
 import numpy as np
 import pyquaternion
@@ -137,6 +138,8 @@ class NuScenesDataset(Custom3DDataset):
         test_mode=False,
         eval_version="detection_cvpr_2019",
         use_valid_flag=False,
+        precomputed=False,
+        embeddings_path="embeddings/",
     ) -> None:
         self.load_interval = load_interval
         self.use_valid_flag = use_valid_flag
@@ -165,6 +168,24 @@ class NuScenesDataset(Custom3DDataset):
                 use_map=False,
                 use_external=False,
             )
+        self.precomputed = precomputed
+        self.embeddings_path = embeddings_path
+        
+        if precomputed:
+            # Pre-load all embeddings into memory or create index
+            self.embeddings_index = self._build_embeddings_index()
+
+    def _build_embeddings_index(self):
+        """Build index of embeddings for faster access during training."""
+        index = {}
+        for sample in self.data_infos:
+            token = sample['token']
+            embeddings = {
+                'img': os.path.join(self.embeddings_path, f"{token}_camera.pth"),
+                'points': os.path.join(self.embeddings_path, f"{token}_lidar.pth")
+            }
+            index[token] = embeddings
+        return index
 
     def get_cat_ids(self, idx):
         """Get category distribution of single scene.
