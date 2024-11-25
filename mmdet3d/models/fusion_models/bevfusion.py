@@ -278,7 +278,6 @@ class BEVFusion(Base3DFusionModel):
     ):
         if self.save_embeddings:
             token = metas[0]['token']
-            
             if "camera" in self.encoders:
                 camera_feat = self.extract_camera_features(
                     img,
@@ -300,7 +299,11 @@ class BEVFusion(Base3DFusionModel):
                 lidar_feat = self.extract_lidar_features(points)
                 lidar_path = os.path.join(self.save_path, f"{token}_lidar.pth")
                 torch.save(lidar_feat, lidar_path)
+            if gt_masks_bev is not None:
+                gt_masks_path = os.path.join(self.save_path, f"{token}_gt_masks.pth")
+                torch.save(gt_masks_bev, gt_masks_path)
 
+            
             return {}
 
         if self.precomputed:
