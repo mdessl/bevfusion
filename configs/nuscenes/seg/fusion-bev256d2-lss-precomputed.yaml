@@ -130,4 +130,3 @@ lr_config:
 
 momentum_config:
   policy: cyclic
-

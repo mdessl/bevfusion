@@ -276,6 +276,7 @@ class BEVFusion(Base3DFusionModel):
         gt_labels_3d=None,
         **kwargs,
     ):
+        print("forward working")
         if self.save_embeddings:
             token = metas[0]['token']
             if "camera" in self.encoders:
@@ -302,14 +303,13 @@ class BEVFusion(Base3DFusionModel):
             if gt_masks_bev is not None:
                 gt_masks_path = os.path.join(self.save_path, f"{token}_gt_masks.pth")
                 torch.save(gt_masks_bev, gt_masks_path)
-
             
             return {}
 
         if self.precomputed:
             features = []
             token = metas[0]['token']
-            camera_feat, lidar_feat = self.load_embeddings(token)
+            camera_feat, lidar_feat, gt_masks_bev = self.load_embeddings(token)
             if camera_feat is not None:
                 features.append(camera_feat)
             if lidar_feat is not None:
@@ -437,11 +437,13 @@ class BEVFusion(Base3DFusionModel):
         """Load precomputed embeddings for a sample."""
         camera_path = os.path.join(self.embeddings_path, f"{token}_camera.pth")
         lidar_path = os.path.join(self.embeddings_path, f"{token}_lidar.pth")
+        gt_path = os.path.join(self.embeddings_path, f"{token}_gt_mask.pth")
         
         camera_feat = torch.load(camera_path) if os.path.exists(camera_path) else None
         lidar_feat = torch.load(lidar_path) if os.path.exists(lidar_path) else None
+        gt_mask = torch.load(gt_path) if os.path.exists(gt_path) else None
         
-        return camera_feat, lidar_feat
+        return camera_feat, lidar_feat, gt_mask
 
     def forward_sbnet(
         self,
