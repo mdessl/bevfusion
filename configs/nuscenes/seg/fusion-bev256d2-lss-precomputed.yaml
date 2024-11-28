@@ -48,6 +48,10 @@ model:
         zbound: [-10.0, 10.0, 20.0]
         dbound: [1.0, 60.0, 0.5]
         downsample: 2
+      #channel_layer:
+      #  type: ChannelLayer
+      #  in_channels: 80
+      #  out_channels: 256
     lidar:
       voxelize:
         max_num_points: 10
@@ -130,3 +134,5 @@ lr_config:
 
 momentum_config:
   policy: cyclic
+
+find_unused_parameters: true

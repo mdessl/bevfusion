@@ -46,32 +46,31 @@ class BEVFusion(Base3DFusionModel):
         self.precomputed = precomputed
         self.embeddings_path = embeddings_path
 
-        if not self.precomputed:
-            self.encoders = nn.ModuleDict()
-            if encoders.get("camera") is not None:
-                self.encoders["camera"] = nn.ModuleDict(
-                    {
-                        "backbone": build_backbone(encoders["camera"]["backbone"]),
-                        "neck": build_neck(encoders["camera"]["neck"]),
-                        "vtransform": build_vtransform(encoders["camera"]["vtransform"]),
-                    }
-                )
-                if encoders["camera"].get("channel_layer") is not None:
-                    self.encoders["camera"]["channel_layer"] = build_channel_layer(encoders["camera"]["channel_layer"])
-                
-            if encoders.get("lidar") is not None:
-                if encoders["lidar"]["voxelize"].get("max_num_points", -1) > 0:
-                    voxelize_module = Voxelization(**encoders["lidar"]["voxelize"])
-                else:
-                    voxelize_module = DynamicScatter(**encoders["lidar"]["voxelize"])
-                self.encoders["lidar"] = nn.ModuleDict(
-                    {
-                        "voxelize": voxelize_module,
-                        "backbone": build_backbone(encoders["lidar"]["backbone"]),
-                    }
-                )
-                
-                self.voxelize_reduce = encoders["lidar"].get("voxelize_reduce", True)
+        self.encoders = nn.ModuleDict()
+        if encoders.get("camera") is not None:
+            self.encoders["camera"] = nn.ModuleDict(
+                {
+                    "backbone": build_backbone(encoders["camera"]["backbone"]),
+                    "neck": build_neck(encoders["camera"]["neck"]),
+                    "vtransform": build_vtransform(encoders["camera"]["vtransform"]),
+                }
+            )
+            if encoders["camera"].get("channel_layer") is not None:
+                self.encoders["camera"]["channel_layer"] = build_channel_layer(encoders["camera"]["channel_layer"])
+            
+        if encoders.get("lidar") is not None:
+            if encoders["lidar"]["voxelize"].get("max_num_points", -1) > 0:
+                voxelize_module = Voxelization(**encoders["lidar"]["voxelize"])
+            else:
+                voxelize_module = DynamicScatter(**encoders["lidar"]["voxelize"])
+            self.encoders["lidar"] = nn.ModuleDict(
+                {
+                    "voxelize": voxelize_module,
+                    "backbone": build_backbone(encoders["lidar"]["backbone"]),
+                }
+            )
+            
+            self.voxelize_reduce = encoders["lidar"].get("voxelize_reduce", True)
 
         if fuser is not None:
             self.fuser = build_fuser(fuser)
@@ -97,14 +96,14 @@ class BEVFusion(Base3DFusionModel):
                 if heads[name] is not None:
                     self.loss_scale[name] = 1.0
 
-        #self.init_weights()
-        if False:
-            for name, param in self.named_parameters():
-                if 'encoders.camera.channel_layer' not in name:
-                    param.requires_grad = False
-                else:
-                    param.requires_grad = True
-                    print(f"Keeping {name} trainable")
+        #for param in self.parameters():
+        #    param.requires_grad = False
+
+        # Unfreeze only the camera channel layer if it exists
+        #if "camera" in self.encoders and "channel_layer" in self.encoders["camera"]:
+        #    for param in self.encoders["camera"]["channel_layer"].parameters():
+        #        param.requires_grad = True
+            
 
     def init_weights(self) -> None:
         if not self.precomputed and "camera" in self.encoders:
@@ -225,7 +224,6 @@ class BEVFusion(Base3DFusionModel):
             "gt_labels_3d": gt_labels_3d,
             **kwargs,
         }
-
 
         if isinstance(img, list):
             raise NotImplementedError

@@ -20,7 +20,7 @@ OBJECTSAMPLERS = Registry("Object sampler")
 def build_dataset(cfg, default_args=None):
     from mmdet3d.datasets.dataset_wrappers import CBGSDataset
     from mmdet.datasets.dataset_wrappers import ClassBalancedDataset, ConcatDataset, RepeatDataset
-    from mmdet3d.datasets.embedding_dataset import EmbeddingDataset
+    #from mmdet3d.datasets.embedding_dataset import EmbeddingDataset
     if isinstance(cfg, (list, tuple)):
         dataset = ConcatDataset([build_dataset(c, default_args) for c in cfg])
     elif cfg["type"] == "ConcatDataset":
@@ -38,8 +38,6 @@ def build_dataset(cfg, default_args=None):
         dataset = CBGSDataset(build_dataset(cfg["dataset"], default_args))
     elif isinstance(cfg.get("ann_file"), (list, tuple)):
         dataset = _concat_dataset(cfg, default_args)
-    elif cfg["type"] == "EmbeddingDataset":
-        dataset = EmbeddingDataset(cfg)
     else:
         dataset = build_from_cfg(cfg, DATASETS, default_args)
 
