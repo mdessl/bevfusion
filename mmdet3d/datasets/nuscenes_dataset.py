@@ -250,10 +250,9 @@ class NuScenesDataset(Custom3DDataset):
                 lidar2camera_rt[:3, :3] = lidar2camera_r.T
                 lidar2camera_rt[3, :3] = -lidar2camera_t
                 data["lidar2camera"].append(lidar2camera_rt.T)
-
                 # camera intrinsics
                 camera_intrinsics = np.eye(4).astype(np.float32)
-                camera_intrinsics[:3, :3] = camera_info["camera_intrinsics"]
+                camera_intrinsics[:3, :3] = camera_info["cam_intrinsic"]
                 data["camera_intrinsics"].append(camera_intrinsics)
 
                 # lidar to image transform
