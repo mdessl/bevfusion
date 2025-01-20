@@ -118,7 +118,7 @@ def parse_args():
         '--zero-tensor-ratio',
         type=float,
         choices=[0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0],
-        default=1.0,
+        default=0.0,
         help='Ratio of scenes to replace the specified feature type with zero tensors (0.0 to 1.0)'
     )
     parser.add_argument(
@@ -244,7 +244,7 @@ def run_experiment(args):
         model = fuse_conv_bn(model)
 
     if not distributed:
-        if False: # test on pretrained single modality models
+        if True: # test on pretrained single modality models
             if "bbox" in args.eval:
                 #model, model_lidar = get_pretrained_single_modality_models_bbox()
                 model = MMDataParallel(model, device_ids=[0])
@@ -256,7 +256,6 @@ def run_experiment(args):
             model = MMDataParallel(model, device_ids=[0])
             outputs = single_gpu_test_with_ratio(model, data_loader, (args.feature_type, args.zero_tensor_ratio))
         else:
-            print("here")
             model = MMDataParallel(model, device_ids=[0])
             outputs = single_gpu_test(model, data_loader)
     else:
@@ -291,7 +290,7 @@ def run_experiment(args):
             return result
 
 def get_pretrained_single_modality_models_seg(cfg):
-
+    #import pdb; pdb.set_trace()
     model = build_model(cfg.model, test_cfg=cfg.get("test_cfg")) # model is camera
     model_lidar = build_model(cfg.model_lidar, test_cfg=cfg.get("test_cfg"))
     wrap_fp16_model(model)
@@ -343,14 +342,14 @@ def main():
     dist.init()
 
     if args.run_experiment:
-        zero_tensor_ratios = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9,1.0]
-        tasks = {"bbox": "object/map", 'map':"map/mean/iou@max"}
+        zero_tensor_ratios = [1.0, 0.5, 0.0] # 0.0, 0.1, 0.3, 0.5, 0.7, 0.9,1.0
+        tasks = {'map':"map/mean/iou@max"} # "bbox": "object/map", 
         modalities = ['lidar','camera']
 
         for task in tasks:
             args.eval = [task]
             metric = tasks[task]
-
+            
             for modality in modalities:
                 args.empty_tensor = 'img' if modality == 'camera' else 'points'
                 args.feature_type = modality
@@ -362,6 +361,9 @@ def main():
                     result = run_experiment(args)
                     results.append(result[metric])
                     results_dict[ratio] = result[metric]
+                    print(modality)
+                    print(ratio)
+                    print(results_dict)
                 with open(f'results_dict_{args.empty_tensor}_{task}.json', 'w') as f:
                     json.dump(results_dict, f)
                 print(f"Results for {task} task, when {modality} modality is not present 0-100% of the time: {results_dict}")
