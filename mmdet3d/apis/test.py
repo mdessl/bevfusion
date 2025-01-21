@@ -48,7 +48,7 @@ def single_gpu_test_with_ratio(model, data_loader, zero_tensor_ratio=None):
 
 
 
-def single_gpu_test_2_models(model_lidar, model_camera, data_loader, zero_tensor_ratio=None):
+def single_gpu_test_2_models(model_camera, model_lidar, data_loader, zero_tensor_ratio=None):
     model_lidar.eval()
     model_camera.eval()
     results = []
@@ -59,10 +59,10 @@ def single_gpu_test_2_models(model_lidar, model_camera, data_loader, zero_tensor
     
     # Randomly sample indices for zero tensors
     zero_indices = set(torch.randperm(len(data_loader))[:num_zeros].tolist())
-    
     for i, data in enumerate(data_loader):
         with torch.no_grad():
-
+            
+            #import pdb; pdb.set_trace()
             res_lidar = model_lidar(return_loss=False, rescale=True, **data)
             res_cam = model_camera(return_loss=False, rescale=True, **data)
 
@@ -74,7 +74,6 @@ def single_gpu_test_2_models(model_lidar, model_camera, data_loader, zero_tensor
             else:
                 #print("result_tens = (res_lidar[0]['masks_bev'] + res_cam[0]['masks_bev']) / 2")
                 result_tens = (res_lidar[0]['masks_bev'] + res_cam[0]['masks_bev']) / 2
-
             result = [{'masks_bev': result_tens, "gt_masks_bev":res_lidar[0]['gt_masks_bev']}]
 
         assert len(result) == 1 

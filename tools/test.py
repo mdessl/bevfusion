@@ -132,7 +132,7 @@ def parse_args():
         help='Run the experiment with multiple zero-tensor-ratio values'
     )
     parser.add_argument(
-        '--two-pretrained',
+        '--ensemble',
         action='store_true',
         help='Run the experiment with multiple zero-tensor-ratio values'
     )
@@ -203,7 +203,7 @@ def run_experiment(args):
             for ds_cfg in cfg.data.test:
                 ds_cfg.pipeline = replace_ImageToTensor(ds_cfg.pipeline)
     
-    if args.feature_type is not None and args.zero_tensor_ratio:
+    if args.feature_type is not None and args.zero_tensor_ratio and not args.ensemble:
         cfg.data.test.pipeline.insert(9,dict(type='AddMissingModality', zero_ratio=args.zero_tensor_ratio, zero_modality=args.feature_type))
     
     samples_per_gpu = 1
@@ -244,7 +244,7 @@ def run_experiment(args):
         model = fuse_conv_bn(model)
 
     if not distributed:
-        if True: # test on pretrained single modality models
+        if args.ensemble: # test on pretrained single modality models
             if "bbox" in args.eval:
                 #model, model_lidar = get_pretrained_single_modality_models_bbox()
                 model = MMDataParallel(model, device_ids=[0])
@@ -342,9 +342,9 @@ def main():
     dist.init()
 
     if args.run_experiment:
-        zero_tensor_ratios = [1.0, 0.5, 0.0] # 0.0, 0.1, 0.3, 0.5, 0.7, 0.9,1.0
+        zero_tensor_ratios = [1.0] # 0.0, 0.1, 0.3, 0.5, 0.7, 0.9,1.0
         tasks = {'map':"map/mean/iou@max"} # "bbox": "object/map", 
-        modalities = ['lidar','camera']
+        modalities = ['lidar', 'camera',]
 
         for task in tasks:
             args.eval = [task]
